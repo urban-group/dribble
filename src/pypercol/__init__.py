@@ -19,3 +19,7 @@ class Percolator:
 
     def get_bond_percolation(self):
         return 0.0
+
+    def my_dummy_func(self):
+        return None
+
