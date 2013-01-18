@@ -8,7 +8,6 @@ __date__   = "2013-01-15"
 
 import numpy as np
 from sys import stderr
-from heapq import merge
 
 PERCOLATING    = 1
 NONPERCOLATING = 0
@@ -35,7 +34,7 @@ class Percolator:
     def __str__(self):
         return str(self._structure.lattice)
 
-    #------------------------ properties ------------------------------#
+    #-------------------------- properties ----------------------------#
 
     @property
     def clusters(self):
@@ -97,12 +96,6 @@ class Percolator:
             else:
                 self._decoration[i] = NONPERCOLATING
 
-    def calc_site_percolation(self):
-        return 0.0
-
-    def calc_bond_percolation(self):
-        return 0.0
-
     def get_cluster(self, site, visited=[]):
         """
         Recursively determine all percolating sites connected to SITE.
@@ -163,10 +156,11 @@ class Percolator:
         species.  0.0 < P < 1.0
         """
 
-        self._decoration[:] = 0
+        self._decoration[:] = NONPERCOLATING
         r = np.random.random(self.num_sites)
-        self._decoration[r <= p] = 1
-        self._n_percolating = np.sum(self._decoration)
+        idx = (r <= p)
+        self._decoration[idx] = PERCOLATING
+        self._n_percolating = np.sum(np.where(idx, 1, 0))
 
     #------------------------- private methods ------------------------#
 
