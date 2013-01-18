@@ -32,7 +32,8 @@ class RandomOrderingTransformation(AbstractTransformation):
 
         new_sites = []
         for site in structure.sites:
-            species = p = []
+            species = []
+            p = []
             # assign each possible element a probability
             for el in site.keys():
                 if (natoms_of_elem_placed[el] < natoms_of_elem[el]):

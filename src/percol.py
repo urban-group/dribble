@@ -3,6 +3,10 @@
 import argparse
 import sys
 
+import numpy as np
+from scipy.optimize import curve_fit
+
+
 try:
     import pymatgen
 except ImportError:
@@ -10,38 +14,45 @@ except ImportError:
     sys.exit()
 
 from pymatgen.io.vaspio       import Poscar
-from pymatgen.transformations.standard_transformations \
-                              import SubstitutionTransformation
-
-from pypercol.transformations import RandomOrderingTransformation
 from pypercol                 import Percolator
-
 
 #----------------------------------------------------------------------#
 
-def percol(poscarfile, el1, el2, p1, navg):
+def sigmoid(x, x0, y0, l, f):
+    return f/(1.0 + np.exp(-l*(x-x0))) + y0
 
-    subst = {el1 : {el1 : p1, el2 : (1.0-p1)}}
+#----------------------------------------------------------------------#
 
-    input_struc      = Poscar.from_file(poscarfile).structure
-    trans            = SubstitutionTransformation(subst)
-    disordered_struc = trans.apply_transformation(input_struc)
+def percol(poscarfile, percolating='Li'):
 
-    trans2           = RandomOrderingTransformation()
+    input_struc = Poscar.from_file(poscarfile).structure
+    percolator  = Percolator(input_struc, percolating)
 
-    p_site = 0
-    p_bond = 0
+    N = 1000
 
-    for i in range(navg):
-        struc = trans2.apply_transformation(disordered_struc)
-        percolator = Percolator(struc)
-        p_site += percolator.get_site_percolation()
-        p_bond += percolator.get_bond_percolation()
+    xdata = []
+    ydata = []
+
+    for p in np.arange(0.05,0.31,0.01):
+
+        P_infinity = 0.0
+        for i in range(N):
+            percolator.random_decoration(p)
+            percolator.find_all_clusters()
+            P_infinity += percolator.p_infinity
+
+        xdata.append(p)
+        ydata.append(P_infinity/float(N))
+
+    xdata = np.array(xdata)
+    ydata = np.array(ydata)
+
+    # fit with sigmoidal function
+    (x0, y0, l, f) = (0.5, 0.01, 30.0, 1.0)
+    (popt, pconv)  = curve_fit(sigmoid, xdata, ydata, p0=(x0, y0, l, f))
+
     
-    p_site /= navg
-    p_bond /= navg
 
-    return (p_site, p_bond)
 
 #----------------------------------------------------------------------#
 
@@ -56,39 +67,15 @@ if __name__=="__main__":
         nargs   = "?")
 
     parser.add_argument(
-        "--element1",
-        help    = "the percolating element",
-        dest    = "element1",
+        "--percolating", "-p",
+        help    = "the percolating species",
+        dest    = "percolating",
         default = "Li" )
-
-    parser.add_argument(
-        "--element2",
-        help    = "the non-percolating element",
-        dest    = "element2",
-        default = "Co" )
-
-    parser.add_argument(
-        "-p", "--probability",
-        help    = "probability of percolating site/species",
-        dest    = "probability",
-        type    = float,
-        default = 0.5 )
-
-    parser.add_argument(
-        "-n", "--n-average",
-        help    = "number of random structures to average",
-        dest    = "naverage",
-        type    = int,
-        default = 10 )
 
     args = parser.parse_args()
 
-    (p_site, p_bond) = percol( 
-        poscarfile = args.structure, 
-        el1        = args.element1,
-        el2        = args.element2,
-        p1         = args.probability,
-        navg       = args.naverage )
+    percol( poscarfile  = args.structure, 
+            percolating = args.percolating )
 
-    print p_site, p_bond
+
 
