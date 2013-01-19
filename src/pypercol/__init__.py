@@ -196,6 +196,38 @@ class Percolator:
         self._neighbors = nbs
 
 
+    def _build_neighbor_list_OLD(self):
+        """
+        Determine the list of neighboring sites for 
+        each site of the lattice.
+        """
+        
+        s = self._structure
+        nsites = self.num_sites
+
+        """
+        Determine nearest neighbor distance for each site.
+        Account for numerical errors and relaxations by using a range 
+        of dr = 0.2 Angstroms.
+        """
+        dr  = 0.2
+        dNN = np.zeros(nsites)
+        dNN[:] = np.max((s.lattice.a, s.lattice.b, s.lattice.c)) + 2*dr
+        nbs = range(nsites)
+        for s1 in range(nsites):
+            for s2 in range(nsites):
+                if (s1 == s2):
+                    continue
+                d = s.get_distance(s1,s2)
+                if (d <= dNN[s1] + dr):
+                    if (d < dNN[s1] - dr):
+                        nbs[s1] = []
+                    dNN[s1] = min(dNN[s1],d)
+                    nbs[s1].append(s2)
+
+        self._neighbors = nbs
+
+
 
 
 #----------------------------------------------------------------------#
