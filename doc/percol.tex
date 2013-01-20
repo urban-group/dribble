@@ -10,17 +10,34 @@
 \usepackage[scaled=0.86]{berasans}
 \usepackage[scaled=1.03]{inconsolata}
 
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+
 \begin{document}
 
-\section{Simulating percolation}
+\section{A take on percolation theory}
 
-There are two limits to approach the problem of percolation through a
-lattice: in the limit of \emph{site percolation} two neighboring sites
-on the lattice enable percolation.  Thus, the only information needed to
-determine if a system is percolating is the \emph{lattice decoration},
-i.e., the occupancies of all sites.  The second limit is \emph{bond
-  percolation}, in which each connection between two neighboring sites
-of the lattice can either be percolating or non-percolating.  
+The problem of percolation through a regular lattice can be approached
+from two directions: 
+%
+in the limit of \emph{site percolation} only the decoration of the
+lattice sites is cnsidered.  If two neighboring sites are occupied by
+the percolating species they are assigned to one \emph{cluster} of
+sites.  We shall denote $P_{n}^{\,\textup{site}}$ the probability of
+finding a cluster of $n$ sites on a given lattice.  The system is
+percolating, if it exhibits at least one infinitely extended cluster.
+%
+Let $P_{\infty}^{\,\textup{site}}$ be the probability that such an
+inifinite cluster exists.
+%
+Given the probability $p$ of a lattice site being occupied by the
+percolating species there exists a critical concentration $p =
+p_{\textup{c}}^{\,\textup{site}}$, the site percolation threshold, below
+which $P_{\infty}$ is exactly equal to zero.
+
+The second limit for the description of percolation considers the
+\emph{bonds} between sites.  The same 
+
 
 \subsection{Site percolation}
 

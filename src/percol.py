@@ -38,30 +38,35 @@ def percol(poscarfile, percolating='Li'):
     dp = 0.01
     p1 = 0.31
 
-    print("Calculating P_infinity:\n")
+    print("Monte-Carlo simulation:\n")
+    print("p       P_s          P_infty      chi")
 
-    data = {}
-    for p in np.arange(p0,p1,dp):
+    p_list  = np.arange(p0,p1,dp)
+    P_infty = np.zeros(len(p_list))
+    P_s     = np.zeros(len(p_list))
+    chi     = np.zeros(len(p_list))
+    for ip in range(len(p_list)):
 
-        print("p = {} ... ".format(p), end="")
+        p = p_list[ip]
 
-        P_infinity = 0.0
         for i in range(N):
             percolator.random_decoration(p)
             percolator.find_all_clusters()
-            P_infinity += percolator.p_infinity
+            P_s[ip]     += percolator.find_spanning_cluster()
+            P_infty[ip] += percolator.p_infinity
+            chi[ip]     += percolator.susceptibility
 
-        data[p] = P_infinity/float(N)
+        P_s[ip]     /= float(N)
+        P_infty[ip] /= float(N)
+        chi[ip]     /= float(N)
 
-        print("done.  P_infinity = {}".format(data[p]))
-
-    data = np.array([data.keys(), data.values()]).transpose()
-    data = np.sort(data, axis=0)
+        print("%5.4f  %10.8f  %10.8f  %15.8e" % (
+            p, P_infty[ip], P_s[ip], chi[ip]))
 
     # fit with sigmoidal function
     print("\nFitting with sigmoidal function... ", end="")
     (x0, y0, l, fac) = (0.5, 0.01, 10.0, 1.0)
-    (popt, pconv)  = curve_fit( stepfunc1, data[:,0], data[:,1], 
+    (popt, pconv)  = curve_fit( stepfunc1, p_list, P_infty, 
                                 p0=(x0, y0, l, fac) )
     print("done.  pc = {}\n".format(popt[0]))
 
@@ -72,9 +77,9 @@ def percol(poscarfile, percolating='Li'):
     fitfile  = "percol.fit"
 
     with open(datafile, "w") as f:
-        f.write("# p     P_infinity\n")
-        for i in range(len(data)):
-            f.write("{}  {}\n".format(data[i,0], data[i,1]))
+        f.write("# p     P_s         P_infty     chi\n")
+        for i in range(len(p_list)):
+            f.write("{}  {} {}  {}\n".format(p_list[i], P_s[i], P_infty[i], chi[i]))
 
     with open(fitfile, "w") as f:
         f.write("# f(x) = a*tanh(b*(x-x0)) + y0\n")
@@ -102,7 +107,16 @@ if (__name__ == "__main__"):
         dest    = "percolating",
         default = "Li" )
 
+    parser.add_argument(
+        "--debug",
+        help    = "run in debugging mode",
+        dest    = "debug",
+        default = False )
+
     args = parser.parse_args()
+
+    if args.debug:
+        np.random.seed(seed=1)
 
     percol( poscarfile  = args.structure, 
             percolating = args.percolating )

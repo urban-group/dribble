@@ -7,6 +7,7 @@ __author__ = "Alexander Urban"
 __date__   = "2013-01-15"
 
 import numpy as np
+import sys
 from sys import stderr
 
 PERCOLATING    = 1
@@ -14,22 +15,28 @@ NONPERCOLATING = 0
 
 class Percolator:
 
-    def __init__(self, structure, percolating='Li'):
+    def __init__(self, structure, percolating='Li', use_decoration=False):
         """
-        structure     an instance of pymatgen.core.structure.Structure
-        percolating   the percolating atomic species
+        structure       an instance of pymatgen.core.structure.Structure
+        percolating     the percolating atomic species
+        use_decoration  use input structure to determine lattice decoration
         """
 
-        self._structure     = structure
-        self._neighbors     = []
-        self._clusters      = []
-        self._p_infinity    = 0.0
-        self._n_percolating = 0
+        self._structure      = structure
+        self._dNN            = 0.0
+        self._neighbors      = []
+        self._clusters       = []
+        self._n_cl_max       = 0
+        self._p_infinity     = 0.0
+        self._susceptibility = 0.0
+        self._n_percolating  = 0
 
         self._build_neighbor_list()
+        self._get_boundaries()
 
         self._decoration = np.zeros(self.num_sites, dtype=int)
-        self.decorate(structure, percolating)
+        if use_decoration:
+            self.decorate(structure, percolating)
 
     def __str__(self):
         return str(self._structure.lattice)
@@ -38,29 +45,102 @@ class Percolator:
 
     @property
     def clusters(self):
+        """
+        A list of all clusters of percolating sites found in the 
+        structure.  The list is set up by `find_all_clusters()'.
+        """
         return self._clusters
 
     @property
     def decoration(self):
+        """
+        A one dimensional ndarray with entries for each lattice site.
+        Percolating sites have the value PERCOLAING; other sites
+        are NONPERCOLATING.
+        """
         return self._decoration
 
     @property
+    def dNN(self):
+        """
+        A list of next neighbor distances for each lattice site.
+        The list is constructed by `find_all_clusters()'.
+        """
+        return self._dNN
+
+    @property
+    def neighbors(self):
+        """
+        A list of lists with next neighbor sites for each lattice site.
+        """
+        return self._neighbors
+
+    @property
     def num_sites(self):
+        """
+        The total number of lattice sites.
+        See also: n_percolating, n_nonpercolating
+        """
         return self._structure.num_sites
 
     @property
     def n_percolating(self):
+        """
+        The number of percolating lattice sites.
+        See also: num_sites, n_nonpercolating
+        """
         return self._n_percolating
 
     @property
+    def n_nonpercolating(self):
+        """
+        The number of non-percolating lattice sites.
+        See also: num_sites, n_percolating
+        """
+        return self.num_sites - self.n_percolating
+
+    @property
     def p_infinity(self):
+        """
+        An estimate for the probability of finding an infinite
+        percolating cluster in the system.
+        The actual value is computed by `find_all_clusters()'.
+        See also: p_percolating
+        """
         return self._p_infinity
 
     @property
+    def p_percolating(self):
+        """
+        The actual probability of a lattice site being percolating.
+        Note: this value may differ from the target probability
+              specified for `random_decoration(p)'
+        """
+        return float(self.n_percolating)/float(self.num_sites)
+
+    @property
     def structure(self):
+        """
+        The structure object that the percolator instance is based on.
+        """
         return self._structure
 
-    #--------------------------- methods ------------------------------#
+    @property
+    def susceptibility(self):
+        """
+        The percolation susceptibility.
+        Its actual value is computed by `find_all_clusters()' 
+        and by `calc_susceptibility()'.
+        """
+        return self._susceptibility
+
+
+    #------------------------------------------------------------------#
+    #                             methods                              #
+    #------------------------------------------------------------------#
+
+    
+    #---------------------- lattice decorations -----------------------#
 
     def decorate(self, structure, percolating='Li'):
         """
@@ -96,6 +176,28 @@ class Percolator:
             else:
                 self._decoration[i] = NONPERCOLATING
 
+    def randomize_decoration(self):
+        """
+        Randomize the current lattice decoration by simply shuffling the 
+        decoration array.
+        """
+
+        np.random.shuffle(self._decoration)
+
+    def random_decoration(self, p):
+        """
+        Randomly decorate lattice with a probability P of the percolating
+        species.  0.0 < P < 1.0
+        """
+
+        self._decoration[:] = NONPERCOLATING
+        r = np.random.random(self.num_sites)
+        idx = (r <= p)
+        self._decoration[idx] = PERCOLATING
+        self._n_percolating = np.sum(np.where(idx, 1, 0))
+
+    #--------------------- percolation analysis -----------------------#
+
     def get_cluster(self, site, visited=[]):
         """
         Recursively determine all percolating sites connected to SITE.
@@ -121,7 +223,9 @@ class Percolator:
 
         """
       
-        self._clusters = []
+        self._clusters     = []
+        self._p_infinity   = 0.0
+        self._n_cl_max     = 0
 
         max_size = 0
 
@@ -130,44 +234,66 @@ class Percolator:
             if ((self._decoration[i] == PERCOLATING) 
                 and (not i in done)):
                 cl = self.get_cluster(i, [])
-                max_size = max(max_size, len(cl))
                 self._clusters.append(cl)
                 done += cl
+                # keep track of the max. cluster size
+                n_cl = len(cl)
+                max_size = max(max_size, n_cl)
 
         if (max_size > 0):
             self._p_infinity = float(max_size)/float(self.n_percolating)
-        else:
-            self._p_infinity = 0.0
+            self._n_cl_max   = max_size
+            self.calc_susceptibility()
+
+    def find_spanning_cluster(self):
+        """
+        Find a clusters that spans the simulation cell.
+        """
       
-    def get_neighbors(self, site_index=0):
-        return self._neighbors[site_index]
+        self._spanning_cluster = []
 
-    def randomize_decoration(self):
+        done = []
+        for axis in range(3):
+            for i in self._bd_min[axis]:
+                if ((self._decoration[i] == PERCOLATING) 
+                    and (not i in done)):
+                    cl = self.get_cluster(i, [])
+                    done += cl
+                    for j in cl:
+                        if j in self._bd_max[axis]:
+                            self._spanning_cluster = []
+                            return 1.0
+
+        return 0.0
+
+            
+    #--------------------- derivable quantities -----------------------#
+
+    def calc_susceptibility(self):
         """
-        Randomize the current lattice decoration by simply shuffling the 
-        decoration array.
+        Calculate the percolation susceptibility based on the list
+        of clusters found in the system.
         """
 
-        np.random.shuffle(self._decoration)
+        self._susceptibility = 0.0
 
-    def random_decoration(self, p):
-        """
-        Randomly decorate lattice with a probability P of the percolating
-        species.  0.0 < P < 1.0
-        """
+        for cl in self._clusters:
+            n_cl = len(cl)
+            if not (n_cl == self._n_cl_max):
+                self._susceptibility += float(n_cl*n_cl)
 
-        self._decoration[:] = NONPERCOLATING
-        r = np.random.random(self.num_sites)
-        idx = (r <= p)
-        self._decoration[idx] = PERCOLATING
-        self._n_percolating = np.sum(np.where(idx, 1, 0))
+        self._susceptibility /= float(self.p_percolating)
 
-    #------------------------- private methods ------------------------#
+    #------------------------------------------------------------------#
+    #                         private methods                          #
+    #------------------------------------------------------------------#
 
-    def _build_neighbor_list(self):
+
+    def _build_neighbor_list(self, dr  = 0.2, pbc=False):
         """
         Determine the list of neighboring sites for 
-        each site of the lattice.
+        each site of the lattice.  Allow the next neighbor
+        distance to vary about `dr'.
         """
         
         s = self._structure
@@ -175,26 +301,65 @@ class Percolator:
 
         """
         Determine nearest neighbor distance for each site.
-        Account for numerical errors and relaxations by using a range 
-        of dr = 0.2 Angstroms.
+        Account for numerical errors and relaxations by using 
+        a range of dr.
         """
-        dr  = 0.2
+        
         dNN = np.zeros(nsites)
-        dNN[:] = np.max((s.lattice.a, s.lattice.b, s.lattice.c)) + 2*dr
+        dNN[:] = s.lattice.a + s.lattice.b + s.lattice.c + 2*dr
         nbs = range(nsites)
-        for s1 in range(nsites):
-            for s2 in range(nsites):
-                if (s1 == s2):
-                    continue
-                d = s.get_distance(s1,s2)
+        for s1 in range(nsites-1):
+            for s2 in range(s1+1,nsites):
+                if pbc:
+                    d = s.get_distance(s1,s2)
+                else:
+                    d = s.get_distance(s1,s2, jimage=np.array([0.0,0.0,0.0]))
                 if (d <= dNN[s1] + dr):
                     if (d < dNN[s1] - dr):
                         nbs[s1] = []
-                    dNN[s1] = min(dNN[s1],d)
+                    dNN[s1] = min(d, dNN[s1])
                     nbs[s1].append(s2)
+                if (d <= dNN[s2] + dr):
+                    if (d < dNN[s2] - dr):
+                        nbs[s2] = []
+                    dNN[s2] = min(d, dNN[s2])
+                    nbs[s2].append(s1)
 
+        self._dNN       = dNN
         self._neighbors = nbs
 
+    def _get_boundaries(self, dr=0.2):
+        """
+        Determine sites on the boundaries of the lattice cell.
+        """
+
+        self._bd_min = range(3)
+        self._bd_max = range(3)
+
+        coo = np.array(self._structure.frac_coords)
+
+        # assert that all coordinates are in the [0:1.0[ interval
+        assert (np.alltrue(coo >= 0.0) and np.alltrue(coo < 1.0))
+
+        for axis in range(3):
+            dr_scal = dr/self._structure.lattice.abc[axis]
+            idx = np.sort(coo[:,axis])
+            val_min = coo[idx[0],axis]
+            val = val_min
+            self._bd_min[axis] = []
+            i = 0
+            while (val < val_min + dr_scal):
+                self._bd_min[axis].append(idx[i])
+                i += 1
+                val = coo[idx[i],axis]
+            val_max = coo[idx[-1],axis]
+            val = val_max
+            self._bd_max[axis] = []
+            i = 0
+            while (val < val_min + dr_scal):
+                self._bd_min[axis].append(idx[-i])
+                i += 1
+                val = coo[idx[-i],axis]
 
     def _build_neighbor_list_OLD(self):
         """
@@ -225,8 +390,8 @@ class Percolator:
                     dNN[s1] = min(dNN[s1],d)
                     nbs[s1].append(s2)
 
+        self._dNN       = dNN
         self._neighbors = nbs
-
 
 
 
