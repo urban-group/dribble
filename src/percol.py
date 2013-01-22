@@ -61,7 +61,7 @@ def percol(poscarfile, percolating='Li'):
         chi[ip]     /= float(N)
 
         print("%5.4f  %10.8f  %10.8f  %15.8e" % (
-            p, P_infty[ip], P_s[ip], chi[ip]))
+            p, P_s[ip], P_infty[ip], chi[ip]))
 
     # fit with sigmoidal function
     print("\nFitting with sigmoidal function... ", end="")
@@ -110,8 +110,7 @@ if (__name__ == "__main__"):
     parser.add_argument(
         "--debug",
         help    = "run in debugging mode",
-        dest    = "debug",
-        default = False )
+        action  = "store_true" )
 
     args = parser.parse_args()
 

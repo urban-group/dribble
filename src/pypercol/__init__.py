@@ -7,13 +7,16 @@ __author__ = "Alexander Urban"
 __date__   = "2013-01-15"
 
 import numpy as np
-import sys
 from sys import stderr
+
+import sys
+
+from pynblist import NeighborList
 
 PERCOLATING    = 1
 NONPERCOLATING = 0
 
-class Percolator:
+class Percolator(object):
 
     def __init__(self, structure, percolating='Li', use_decoration=False):
         """
@@ -32,6 +35,8 @@ class Percolator:
         self._n_percolating  = 0
 
         self._build_neighbor_list()
+#        self._build_neighbor_list_OLD()
+
         self._get_boundaries()
 
         self._decoration = np.zeros(self.num_sites, dtype=int)
@@ -288,8 +293,7 @@ class Percolator:
     #                         private methods                          #
     #------------------------------------------------------------------#
 
-
-    def _build_neighbor_list(self, dr  = 0.2, pbc=False):
+    def _build_neighbor_list(self, dr=0.2):
         """
         Determine the list of neighboring sites for 
         each site of the lattice.  Allow the next neighbor
@@ -298,6 +302,10 @@ class Percolator:
         
         s = self._structure
         nsites = self.num_sites
+
+        avec = self._structure.lattice.matrix
+        coo  = self._structure.frac_coords
+        self._nblist = NeighborList(avec, coo)
 
         """
         Determine nearest neighbor distance for each site.
@@ -308,22 +316,15 @@ class Percolator:
         dNN = np.zeros(nsites)
         dNN[:] = s.lattice.a + s.lattice.b + s.lattice.c + 2*dr
         nbs = range(nsites)
-        for s1 in range(nsites-1):
-            for s2 in range(s1+1,nsites):
-                if pbc:
-                    d = s.get_distance(s1,s2)
-                else:
-                    d = s.get_distance(s1,s2, jimage=np.array([0.0,0.0,0.0]))
+        for s1 in range(nsites):
+            possible = self._nblist.get_possible_neighbors(s1)
+            for s2 in possible:
+                d = s.get_distance(s1,s2)
                 if (d <= dNN[s1] + dr):
                     if (d < dNN[s1] - dr):
                         nbs[s1] = []
                     dNN[s1] = min(d, dNN[s1])
                     nbs[s1].append(s2)
-                if (d <= dNN[s2] + dr):
-                    if (d < dNN[s2] - dr):
-                        nbs[s2] = []
-                    dNN[s2] = min(d, dNN[s2])
-                    nbs[s2].append(s1)
 
         self._dNN       = dNN
         self._neighbors = nbs
@@ -343,7 +344,7 @@ class Percolator:
 
         for axis in range(3):
             dr_scal = dr/self._structure.lattice.abc[axis]
-            idx = np.sort(coo[:,axis])
+            idx = np.argsort(coo[:,axis])
             val_min = coo[idx[0],axis]
             val = val_min
             self._bd_min[axis] = []
@@ -360,39 +361,6 @@ class Percolator:
                 self._bd_min[axis].append(idx[-i])
                 i += 1
                 val = coo[idx[-i],axis]
-
-    def _build_neighbor_list_OLD(self):
-        """
-        Determine the list of neighboring sites for 
-        each site of the lattice.
-        """
-        
-        s = self._structure
-        nsites = self.num_sites
-
-        """
-        Determine nearest neighbor distance for each site.
-        Account for numerical errors and relaxations by using a range 
-        of dr = 0.2 Angstroms.
-        """
-        dr  = 0.2
-        dNN = np.zeros(nsites)
-        dNN[:] = np.max((s.lattice.a, s.lattice.b, s.lattice.c)) + 2*dr
-        nbs = range(nsites)
-        for s1 in range(nsites):
-            for s2 in range(nsites):
-                if (s1 == s2):
-                    continue
-                d = s.get_distance(s1,s2)
-                if (d <= dNN[s1] + dr):
-                    if (d < dNN[s1] - dr):
-                        nbs[s1] = []
-                    dNN[s1] = min(dNN[s1],d)
-                    nbs[s1].append(s2)
-
-        self._dNN       = dNN
-        self._neighbors = nbs
-
 
 
 #----------------------------------------------------------------------#
