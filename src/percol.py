@@ -51,10 +51,10 @@ def percol(poscarfile, percolating='Li'):
 
         for i in range(N):
             percolator.random_decoration(p)
-            percolator.find_all_clusters()
+            # percolator.find_all_clusters()
             P_s[ip]     += percolator.find_spanning_cluster()
-            P_infty[ip] += percolator.p_infinity
-            chi[ip]     += percolator.susceptibility
+            P_infty[ip] += 0 #percolator.p_infinity
+            chi[ip]     += 0 #percolator.susceptibility
 
         P_s[ip]     /= float(N)
         P_infty[ip] /= float(N)

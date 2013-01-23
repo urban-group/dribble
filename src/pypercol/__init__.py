@@ -35,7 +35,6 @@ class Percolator(object):
         self._n_percolating  = 0
 
         self._build_neighbor_list()
-#        self._build_neighbor_list_OLD()
 
         self._get_boundaries()
 
@@ -203,7 +202,7 @@ class Percolator(object):
 
     #--------------------- percolation analysis -----------------------#
 
-    def get_cluster(self, site, visited=[]):
+    def get_cluster(self, site, visited=[], pbc=True):
         """
         Recursively determine all percolating sites connected to SITE.
         """
@@ -212,9 +211,11 @@ class Percolator(object):
             return visited
         
         visited.append(site)
-        for nb in self._neighbors[site]:
+        for (nb,jimg) in self._neighbors[site]:
+            if not (pbc or np.all(jimg == 0)):
+                continue
             if ((not (nb in visited)) and (self._decoration[nb] == PERCOLATING)):
-                visited += self.get_cluster(nb, visited)[len(visited):]
+                visited += self.get_cluster(nb, visited, pbc)[len(visited):]
 
         return visited
                 
@@ -252,7 +253,8 @@ class Percolator(object):
 
     def find_spanning_cluster(self):
         """
-        Find a clusters that spans the simulation cell.
+        Count clusters that span the simulation cell.
+        (No p.b.c.)
         """
       
         self._spanning_cluster = []
@@ -262,11 +264,11 @@ class Percolator(object):
             for i in self._bd_min[axis]:
                 if ((self._decoration[i] == PERCOLATING) 
                     and (not i in done)):
-                    cl = self.get_cluster(i, [])
+                    cl = self.get_cluster(i, [], pbc=False)
                     done += cl
-                    for j in cl:
-                        if j in self._bd_max[axis]:
-                            self._spanning_cluster = []
+                    for j in self._bd_max[axis]:
+                        if j in cl:
+                            self._spanning_cluster = cl
                             return 1.0
 
         return 0.0
@@ -319,12 +321,14 @@ class Percolator(object):
         for s1 in range(nsites):
             possible = self._nblist.get_possible_neighbors(s1)
             for s2 in possible:
-                d = s.get_distance(s1,s2)
+                (d, jimg) = s[s1].distance_and_image(s[s2])
+#                d = s.get_distance(s1,s2)
                 if (d <= dNN[s1] + dr):
                     if (d < dNN[s1] - dr):
                         nbs[s1] = []
                     dNN[s1] = min(d, dNN[s1])
-                    nbs[s1].append(s2)
+                    nbs[s1].append((s2,jimg))
+#                    nbs[s1].append(s2)
 
         self._dNN       = dNN
         self._neighbors = nbs
@@ -356,12 +360,11 @@ class Percolator(object):
             val_max = coo[idx[-1],axis]
             val = val_max
             self._bd_max[axis] = []
-            i = 0
-            while (val < val_min + dr_scal):
-                self._bd_min[axis].append(idx[-i])
+            i = 1
+            while (val > val_max - dr_scal):
+                self._bd_max[axis].append(idx[-i])
                 i += 1
                 val = coo[idx[-i],axis]
-
 
 #----------------------------------------------------------------------#
 
