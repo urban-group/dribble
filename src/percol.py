@@ -9,12 +9,11 @@ import numpy as np
 from scipy.optimize import curve_fit
 
 try:
-    import pymatgen
+    from pymatgen.io.vaspio import Poscar
 except ImportError:
     print("Unable to load the `pymatgen' module.")
     sys.exit()
 
-from pymatgen.io.vaspio import Poscar
 from pypercol           import Percolator
 from pypercol.aux       import sigmoidal1
 from pypercol.aux       import binom_conv

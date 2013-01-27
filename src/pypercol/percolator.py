@@ -4,11 +4,202 @@ from sys import stderr
 import sys
 
 from pynblist import NeighborList
+from pytiming import timing
+
+#----------------------------------------------------------------------#
 
 PERCOLATING    = 1
 NONPERCOLATING = 0
 
 class Percolator(object):
+
+    _clusters       = []
+    _dNN            = 0.0
+    _p_infinity     = 0.0
+    _susceptibility = 0.0
+    _n_cl_max       = 0
+    _neighbors      = []
+
+    _nsites         = 0
+    _n_percolating  = 0
+
+    _decoration     = []
+    _percolating    = []
+    _nonpercolating = []
+
+    def __init__(self, lattice_vectors, frac_coords):
+        """
+        Arguments:
+          lattice_vectors    3x3 matrix with lattice vectors in rows
+          frac_coords        Nx3 array; fractional coordinates of the 
+                             N lattice sites
+        """
+
+        self._avec   = np.array(lattice_vectors)
+        self._coo    = np.array(frac_coords)
+        self._nsites = len(self._coo)
+
+        self._decoration    = np.zeros(self._nsites)
+
+        self._build_neighbor_list()
+
+    @classmethod
+    def from_structure(cls, structure, percolating='Li', use_decoration=False):
+        """
+        Create a Percolator instance based on the lattice vectors
+        defined in a `structure' object.
+
+        Arguments:
+          structure       an instance of pymatgen.core.structure.Structure
+          use_decoration  Boolean; use site occupancies of `structure'
+          percolating     String; the percolating species
+        """
+    
+        avec   = structure.lattice.matrix
+        coo    = structure.frac_coords
+        percol = cls(avec, coo)
+
+        if use_decoration:
+            percol.decorate_using_structure(structure, percolating)
+
+        return percol
+
+    #------------------------------------------------------------------#
+    #                          public methods                          #
+    #------------------------------------------------------------------#
+
+    #---------------------- lattice decorations -----------------------#
+
+    def add_percolating_site(self, site=None):
+        """
+        Change status of SITE to be percolating.
+        If SITE is not specified, it will be randomly selected.
+        """
+
+        if not site:
+            sel = np.random.random_integers(1,len(self._nonpercolating))
+            site = self._nonpercolating[sel]
+        else:
+            sel = self._nonpercolating.index(site)
+
+        del self._nonpercolating[sel]
+        self._percolating.append(site)
+
+        # for the moment, add a new cluster
+        self._clusters.append(site)
+        self._decoration[site] = len(self._clusters)
+
+        # check, if this site
+        # - defines a new cluster,
+        # - will be added to an existing cluster, or
+        # - connects multiple existing clusters.
+        for (nb, T) in self._neighbors[site]:
+            cl = self._decoration[nb]
+            if cl > 0:  # site is occupies
+                self._merge_clusters(cl, self._decoration[site])
+                    
+            
+
+            
+
+    def decorate_using_structure(self, structure, percolating):
+        """
+        Use the lattice decoration of STRUCTURE 
+        (from pymatgen.core.structure) to set the occupancies of the 
+        internal lattice representation.  The percolating species 
+        is PERCOLATING.
+
+        STRUCTURE must not be disordered.  Instead it is expected to 
+        have definite (integer) site occupancies.
+
+        The only distinction made is between the PERCOLATING species
+        and any other non-percolating species.  The actual atom types
+        are not stored. This is mainly important to understand how
+        randomize_decoration() works.
+
+        """
+
+        if not structure.is_ordered:
+            stderr.write("Warning: structure NOT ordered."
+                         +" No decoration obtained.")
+            return
+
+        if not (structure.num_sites == self.num_sites):
+            raise IncompatibleStructureException("Error: incompatible structure.")
+
+        self._n_percolating  = 0
+        self._percolating    = []
+        self._nonpercolating = []
+            
+        for i in range(self.num_sites):
+            if (structure.sites[i].specie.symbol == percolating):
+                self._decoration[i] = PERCOLATING
+                self._percolating.append(i)
+                self._n_percolating += 1
+            else:
+                self._decoration[i] = NONPERCOLATING
+                self._nonpercolating.append(i)
+    
+    def random_decoration_n(self, n):
+        """
+        Randomly decorate lattice with exactly n percolating sites.
+        If n greater than the number of sites, all sites will be 
+        occupied by the percolating species (boring).
+        """
+        
+        n = min(self.num_sites, n)
+        self._decoration[:] = NONPERCOLATING
+        for i in range(n):
+            self._decoration[i] = PERCOLATING
+        self.randomize_decoration()
+
+    def random_decoration_p(self, p):
+        """
+        Randomly decorate lattice with a probability P of the percolating
+        species.  0.0 < P < 1.0
+        """
+
+        self._decoration[:] = NONPERCOLATING
+        r = np.random.random(self.num_sites)
+        idx = (r <= p)
+        self._decoration[idx] = PERCOLATING
+        self._n_percolating = np.sum(np.where(idx, 1, 0))
+
+    def randomize_decoration(self):
+        """
+        Randomize the current lattice decoration by simply shuffling the 
+        decoration array.
+        """
+
+        np.random.shuffle(self._decoration)
+
+
+    #------------------------------------------------------------------#
+    #                         private methods                          #
+    #------------------------------------------------------------------#
+
+    def _build_neighbor_list(self, dr=0.2):
+        """
+        Determine the list of neighboring sites for 
+        each site of the lattice.  Allow the next neighbor
+        distance to vary about `dr'.
+        """
+
+        dNN    = np.empty(self._nsites)
+        nbs    = range(self._nsites)
+
+        nblist = NeighborList(self._avec, self._coo)
+        
+        for i in range(self._nsites):
+            (nbl, dist, Tvecs) = nblist.get_neighbors_and_distances(i)
+            nbs[i] = [(nbl[j], Tvecs[j]) for j in range(len(nbl))]
+            dNN[i] = np.min(dist)
+
+        self._dNN       = dNN
+        self._neighbors = nbs
+
+
+class Percolator2(object):
 
     def __init__(self, structure, percolating='Li', use_decoration=False):
         """
