@@ -4,28 +4,11 @@ from sys import stderr
 import sys
 
 from pynblist import NeighborList
-from pytiming import timing
+from aux      import binom_conv
 
 #----------------------------------------------------------------------#
 
-PERCOLATING    = 1
-NONPERCOLATING = 0
-
 class Percolator(object):
-
-    _clusters       = []
-    _dNN            = 0.0
-    _p_infinity     = 0.0
-    _susceptibility = 0.0
-    _n_cl_max       = 0
-    _neighbors      = []
-
-    _nsites         = 0
-    _n_percolating  = 0
-
-    _decoration     = []
-    _percolating    = []
-    _nonpercolating = []
 
     def __init__(self, lattice_vectors, frac_coords):
         """
@@ -35,16 +18,32 @@ class Percolator(object):
                              N lattice sites
         """
 
-        self._avec   = np.array(lattice_vectors)
-        self._coo    = np.array(frac_coords)
-        self._nsites = len(self._coo)
+        """                    static data
 
-        self._decoration    = np.zeros(self._nsites)
+        _avec[i][j]   j-th component of the i-th lattice vector
+        _coo[i][j]    j-th component of the coordinates of the i-th 
+                      lattice site
+        _nsites       total number of lattice sites
 
+        _dNN[i]             nearest neighbor distance from the i-th site
+        _neighbors[i][j]    j-th neighbor site of site i
+        _T_vectors[i][j]    the translation vector belonging to 
+                            _neighbors[i][j]
+        """
+
+        self._avec           = np.array(lattice_vectors)
+        self._coo            = np.array(frac_coords)
+        self._nsites         = len(self._coo)
+
+        self.reset()
+
+        self._dNN       = []
+        self._neighbors = []
+        self._T_vectors = []
         self._build_neighbor_list()
 
     @classmethod
-    def from_structure(cls, structure, percolating='Li', use_decoration=False):
+    def from_structure(cls, structure):
         """
         Create a Percolator instance based on the lattice vectors
         defined in a `structure' object.
@@ -59,16 +58,67 @@ class Percolator(object):
         coo    = structure.frac_coords
         percol = cls(avec, coo)
 
-        if use_decoration:
-            percol.decorate_using_structure(structure, percolating)
-
         return percol
+
+    def reset(self):
+        """
+        Reset the instance to the state of initialization.
+        """
+
+        """              internal dynamic data
+
+        _cluster[i]   ID of cluster that site i belongs to; < 0, if
+                      site i is vacant
+        _nclusters    total number of clusters with more than 0 sites
+                      Note: len(_first) can be larger than this !
+        _first[i]     first site (head) of the i-th cluster
+        _size[i]      size of cluster i (i.e., number of sites in i)
+        _next[i]      the next site in the same cluster as site i;
+                      < 0, if site i is the final site
+        _vec[i][j]    j-th component of the vector that connects
+                      site i with the head site of the cluster
+
+        _percolating[i]     i-th percolating site
+        _nonpercolating[i]  i-th non-percolating (empty) site
+
+        """
+
+        self._cluster    = np.empty(self._nsites, dtype=int)
+        self._cluster[:] = -1
+        self._nclusters  = 0
+        self._first      = []
+        self._size       = []
+        self._largest    = 1
+        self._next       = np.empty(self._nsites, dtype=int)
+        self._next[:]    = -1
+        self._vec        = np.zeros(self._coo.shape)
+
+        self._percolating    = []
+        self._nonpercolating = range(self._nsites)
+
+    #------------------------------------------------------------------#
+    #                            properties                            #
+    #------------------------------------------------------------------#
+
+    @property
+    def num_clusters(self):
+        return self._nclusters
+
+    @property
+    def num_percolating(self):
+        return len(self._percolating)
+
+    @property
+    def num_nonpercolating(self):
+        return len(self._nonpercolating)
+
+    @property
+    def num_sites(self):
+        return self._nsites
 
     #------------------------------------------------------------------#
     #                          public methods                          #
     #------------------------------------------------------------------#
-
-    #---------------------- lattice decorations -----------------------#
 
     def add_percolating_site(self, site=None):
         """
@@ -76,8 +126,12 @@ class Percolator(object):
         If SITE is not specified, it will be randomly selected.
         """
 
+        if (self.num_nonpercolating <= 0):
+            print "Warning: can not add further sites"
+            return
+
         if not site:
-            sel = np.random.random_integers(1,len(self._nonpercolating))
+            sel = np.random.random_integers(0,len(self._nonpercolating)-1)
             site = self._nonpercolating[sel]
         else:
             sel = self._nonpercolating.index(site)
@@ -86,92 +140,48 @@ class Percolator(object):
         self._percolating.append(site)
 
         # for the moment, add a new cluster
-        self._clusters.append(site)
-        self._decoration[site] = len(self._clusters)
+        self._first.append(site)
+        self._size.append(1)
+        self._cluster[site] = len(self._first) - 1
+        self._nclusters += 1
+        self._vec[site, :]  = [0.0, 0.0, 0.0]
 
         # check, if this site
         # - defines a new cluster,
         # - will be added to an existing cluster, or
         # - connects multiple existing clusters.
-        for (nb, T) in self._neighbors[site]:
-            cl = self._decoration[nb]
-            if cl > 0:  # site is occupies
-                self._merge_clusters(cl, self._decoration[site])
+        for i in range(len(self._neighbors[site])):
+            nb = self._neighbors[site][i]
+            cl = self._cluster[nb]
+            if (cl >= 0) and (cl != self._cluster[site]):
+                self._merge_clusters(cl, nb, self._cluster[site], 
+                                     site, -self._T_vectors[site][i])
                     
-            
-
-            
-
-    def decorate_using_structure(self, structure, percolating):
+    def calc_p_infinity(self, plist, samples=500):
         """
-        Use the lattice decoration of STRUCTURE 
-        (from pymatgen.core.structure) to set the occupancies of the 
-        internal lattice representation.  The percolating species 
-        is PERCOLATING.
+        Calculate and return estimate for P_infinity.
 
-        STRUCTURE must not be disordered.  Instead it is expected to 
-        have definite (integer) site occupancies.
-
-        The only distinction made is between the PERCOLATING species
-        and any other non-percolating species.  The actual atom types
-        are not stored. This is mainly important to understand how
-        randomize_decoration() works.
-
+        Arguments:
+          plist     list with desired probability points
+          samples   number of samples to average over
         """
 
-        if not structure.is_ordered:
-            stderr.write("Warning: structure NOT ordered."
-                         +" No decoration obtained.")
-            return
+        Pn = np.zeros(self._nsites)
+        w = 1.0/float(samples)
+        for i in range(samples):
+            self.reset()
+            for n in range(self._nsites):
+                self.add_percolating_site()
+                Pn[n] += w*(self._largest/self.num_percolating)
 
-        if not (structure.num_sites == self.num_sites):
-            raise IncompatibleStructureException("Error: incompatible structure.")
-
-        self._n_percolating  = 0
-        self._percolating    = []
-        self._nonpercolating = []
-            
-        for i in range(self.num_sites):
-            if (structure.sites[i].specie.symbol == percolating):
-                self._decoration[i] = PERCOLATING
-                self._percolating.append(i)
-                self._n_percolating += 1
-            else:
-                self._decoration[i] = NONPERCOLATING
-                self._nonpercolating.append(i)
-    
-    def random_decoration_n(self, n):
-        """
-        Randomly decorate lattice with exactly n percolating sites.
-        If n greater than the number of sites, all sites will be 
-        occupied by the percolating species (boring).
-        """
+        i = 0
+        Pp = np.empty(len(plist))
+        for p in plist:
+              Pp[i] = binom_conv(Pn, range(1, self._nsites+1), self._nsites, p)
+              i += 1
         
-        n = min(self.num_sites, n)
-        self._decoration[:] = NONPERCOLATING
-        for i in range(n):
-            self._decoration[i] = PERCOLATING
-        self.randomize_decoration()
-
-    def random_decoration_p(self, p):
-        """
-        Randomly decorate lattice with a probability P of the percolating
-        species.  0.0 < P < 1.0
-        """
-
-        self._decoration[:] = NONPERCOLATING
-        r = np.random.random(self.num_sites)
-        idx = (r <= p)
-        self._decoration[idx] = PERCOLATING
-        self._n_percolating = np.sum(np.where(idx, 1, 0))
-
-    def randomize_decoration(self):
-        """
-        Randomize the current lattice decoration by simply shuffling the 
-        decoration array.
-        """
-
-        np.random.shuffle(self._decoration)
+        return Pp
+        
 
 
     #------------------------------------------------------------------#
@@ -187,16 +197,60 @@ class Percolator(object):
 
         dNN    = np.empty(self._nsites)
         nbs    = range(self._nsites)
+        Tvecs  = range(self._nsites)
 
         nblist = NeighborList(self._avec, self._coo)
         
         for i in range(self._nsites):
-            (nbl, dist, Tvecs) = nblist.get_neighbors_and_distances(i)
-            nbs[i] = [(nbl[j], Tvecs[j]) for j in range(len(nbl))]
-            dNN[i] = np.min(dist)
+            (nbl, dist, T) = nblist.get_neighbors_and_distances(i)
+            nbs[i]   = nbl
+            Tvecs[i] = T
+            dNN[i]   = np.min(dist)
 
         self._dNN       = dNN
         self._neighbors = nbs
+        self._T_vectors = Tvecs
+
+    def _merge_clusters(self, cluster1, site1, cluster2, site2, T2):
+        """
+        Add sites of cluster2 to cluster1.
+        """
+
+        if (cluster1 == cluster2):
+            return
+
+        # vector from head node of cluster2 to head of cluster1
+        v_12 = (self._coo[site2] + T2) - self._coo[site1]
+        vec  = self._vec[site1] - v_12 - self._vec[site2]
+        
+        # add this vector to all elements of the second cluster
+        # and change their cluster ID
+        i = self._first[cluster2]
+        self._vec[i, :] += vec
+        self._cluster[i] = cluster1
+        if (i>=0):
+            while (self._next[i] >= 0):
+                i = self._next[i]
+                self._vec[i,:] += vec
+                self._cluster[i] = cluster1
+
+        # insert second cluster right after the head node in 
+        # cluster 1
+        j = self._first[cluster1]
+        self._next[i] = self._next[j]
+        self._next[j] = self._first[cluster2]
+
+        # keep track of the cluster sizes and the largest cluster
+        self._size[cluster1] += self._size[cluster2]
+        self._size[cluster2] = 0
+        self._largest = max(self._largest, self._size[cluster1])
+
+        # Do not delete the cluster here, but rather disable it.
+        # Otherwise we would have to update the cluster IDs on all sites.
+        self._first[cluster2] = -1
+        self._nclusters -= 1
+
+
 
 
 class Percolator2(object):

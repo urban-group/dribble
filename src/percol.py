@@ -22,43 +22,56 @@ from pypercol.aux       import binom_conv
 
 def percol(poscarfile, percolating='Li'):
 
-    print("\nInitializing the percolator... ", end="")
+    struc = Poscar.from_file(poscarfile).structure
+    percolator = Percolator.from_structure(struc)
 
-    input_struc = Poscar.from_file(poscarfile).structure
-    percolator  = Percolator(input_struc, percolating)
+    plist = np.arange(0.00, 1.01, 0.01)
+    P = percolator.calc_p_infinity(plist)
 
-    print("done.\n")
-
-    N = percolator.num_sites
-    Nav = 10
-
-    print("Monte-Carlo simulation:\n")
-    print("n       P_s")
-    
-    P_s = np.zeros(len(range(N+1)))
-    n_one = 0
-    n_one_limit = int(float(N)*0.1)
-    for n in range(N+1):
-        for i in range(Nav):
-            percolator.random_decoration_n(n)
-            P_s[n] += percolator.find_spanning_cluster()
-        P_s[n] /= float(Nav)
-        print("%5.4f  %10.8f" % (n, P_s[n]))
-        if P_s[n] == 1.0:
-            n_one += 1
-        else:
-            n_one = 0
-        if n_one > n_one_limit:
-            print("Seems converged. Stopping.")
-            P_s[n+1:N] = 1.0
-            break
-        
     datafile = "percol.out"
     with open(datafile, "w") as f:
         f.write("# p     P_s\n")
-        for p in np.arange(0.00, 1.01, 0.01):
-              Pp = binom_conv(P_s, range(N+1), N, p)
-              f.write("{}  {}\n".format(p, Pp))
+        for i in range(len(plist)):
+              f.write("{}  {}\n".format(plist[i], P[i]))
+
+
+#$    print("\nInitializing the percolator... ", end="")
+#$
+#$    input_struc = Poscar.from_file(poscarfile).structure
+#$    percolator  = Percolator(input_struc, percolating)
+#$
+#$    print("done.\n")
+#$
+#$    N = percolator.num_sites
+#$    Nav = 10
+#$
+#$    print("Monte-Carlo simulation:\n")
+#$    print("n       P_s")
+#$    
+#$    P_s = np.zeros(len(range(N+1)))
+#$    n_one = 0
+#$    n_one_limit = int(float(N)*0.1)
+#$    for n in range(N+1):
+#$        for i in range(Nav):
+#$            percolator.random_decoration_n(n)
+#$            P_s[n] += percolator.find_spanning_cluster()
+#$        P_s[n] /= float(Nav)
+#$        print("%5.4f  %10.8f" % (n, P_s[n]))
+#$        if P_s[n] == 1.0:
+#$            n_one += 1
+#$        else:
+#$            n_one = 0
+#$        if n_one > n_one_limit:
+#$            print("Seems converged. Stopping.")
+#$            P_s[n+1:N] = 1.0
+#$            break
+#$        
+#$    datafile = "percol.out"
+#$    with open(datafile, "w") as f:
+#$        f.write("# p     P_s\n")
+#$        for p in np.arange(0.00, 1.01, 0.01):
+#$              Pp = binom_conv(P_s, range(N+1), N, p)
+#$              f.write("{}  {}\n".format(p, Pp))
 
 #$    print("Monte-Carlo simulation:\n")
 #$    print("p       P_s          P_infty      chi")
