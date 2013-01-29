@@ -74,10 +74,32 @@ class NeighborList(object):
 
         self._build_neighbor_list()
 
+    @classmethod
+    def from_structure(cls, structure, **kwargs):
+        """
+        Factory method: initialize neighbor list for an instance of 
+        pymatgen.core.structure.Structure.
+        
+        Keyword arguments are passed on to the regular constructor.
+        """
+
+        nbl = cls(structure.lattice.matrix, structure.frac_coords,
+                  structure.species, **kwargs)
+        
+        return nbl
+
     def __str__(self):
         return
 
     #--------------------------- properties ---------------------------#
+
+    @property
+    def atom_types(self):
+        """
+        A list of the atomic species of each site, if provided
+        on initialization.
+        """
+        return self._types
 
     @property
     def coords(self):
@@ -101,7 +123,7 @@ class NeighborList(object):
         return self._avec
 
     @property
-    def num_cooords(self):
+    def num_coords(self):
         """
         Total number of coordinates (= len(coo)).
         """
