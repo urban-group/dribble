@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import numpy as np
 from sys import stderr
 
@@ -31,9 +33,9 @@ class Percolator(object):
                             _neighbors[i][j]
         """
 
-        self._avec           = np.array(lattice_vectors)
-        self._coo            = np.array(frac_coords)
-        self._nsites         = len(self._coo)
+        self._avec   = np.array(lattice_vectors)
+        self._coo    = np.array(frac_coords)
+        self._nsites = len(self._coo)
 
         self.reset()
 
@@ -81,6 +83,9 @@ class Percolator(object):
         _percolating[i]     i-th percolating site
         _nonpercolating[i]  i-th non-percolating (empty) site
 
+        _is_percolating     True, if the largest cluster is percolating;
+                            value is set by check_if_percolating()
+
         """
 
         self._cluster    = np.empty(self._nsites, dtype=int)
@@ -88,13 +93,15 @@ class Percolator(object):
         self._nclusters  = 0
         self._first      = []
         self._size       = []
-        self._largest    = 1
+        self._largest    = -1
         self._next       = np.empty(self._nsites, dtype=int)
         self._next[:]    = -1
         self._vec        = np.zeros(self._coo.shape)
 
         self._percolating    = []
         self._nonpercolating = range(self._nsites)
+
+        self._is_percolating = [False, False, False]
 
     #------------------------------------------------------------------#
     #                            properties                            #
@@ -127,7 +134,7 @@ class Percolator(object):
         """
 
         if (self.num_nonpercolating <= 0):
-            print "Warning: can not add further sites"
+            print("Warning: can not add further sites")
             return
 
         if not site:
@@ -145,19 +152,21 @@ class Percolator(object):
         self._cluster[site] = len(self._first) - 1
         self._nclusters += 1
         self._vec[site, :]  = [0.0, 0.0, 0.0]
+        if (self._largest < 0):
+            self._largest = self._cluster[site]
 
         # check, if this site
         # - defines a new cluster,
         # - will be added to an existing cluster, or
         # - connects multiple existing clusters.
-        for i in range(len(self._neighbors[site])):
+        for i in xrange(len(self._neighbors[site])):
             nb = self._neighbors[site][i]
             cl = self._cluster[nb]
             if (cl >= 0) and (cl != self._cluster[site]):
                 self._merge_clusters(cl, nb, self._cluster[site], 
                                      site, -self._T_vectors[site][i])
                     
-    def calc_p_infinity(self, plist, samples=500):
+    def calc_p_infinity(self, plist, samples=500, save_discrete=False):
         """
         Calculate and return estimate for P_infinity.
 
@@ -166,13 +175,27 @@ class Percolator(object):
           samples   number of samples to average over
         """
 
+        print("Calculating P_infinity (averaging over {} samples):\n".format(samples))
+
         Pn = np.zeros(self._nsites)
         w = 1.0/float(samples)
-        for i in range(samples):
+        for i in xrange(samples):
+            print(".", end="")
             self.reset()
-            for n in range(self._nsites):
+            for n in xrange(self._nsites):
                 self.add_percolating_site()
-                Pn[n] += w*(self._largest/self.num_percolating)
+                Pn[n] += w*(float(self._size[self._largest])/float(self.num_percolating))
+
+        print(" done.\n")
+
+        if save_discrete:
+            fname = 'discrete.dat'
+            print("Saving discrete data to file: {}".format(fname))
+            with open(fname, "w") as f:
+                for n in xrange(self._nsites):
+                    f.write("{} {}\n".format(n+1, Pn[n]))
+
+        print("Return convolution with a binomial distribution.\n")
 
         i = 0
         Pp = np.empty(len(plist))
@@ -181,8 +204,125 @@ class Percolator(object):
               i += 1
         
         return Pp
-        
 
+    def find_percolation_point(self, samples=500, file_name=None):
+        """
+        Determine an estimate for the site percolation threshold p_c.
+        """
+
+        print("Calculating an estimate for the percolation point p_c.")
+        print("Averaging over {} samples:\n".format(samples))
+
+        pc     = np.array([0.0, 0.0, 0.0])
+        pc_all = 0.0
+        w = 1.0/float(samples)
+        for i in xrange(samples):
+            print(".", end="")
+            self.reset()
+            done = [False, False, False]
+            for n in xrange(self._nsites):
+                self.add_percolating_site()
+                self.check_if_percolating()
+                if (self._is_percolating[0]) and not done[0]:
+                    pc[0] += w*float(n)/float(self._nsites)
+                    done[0] = True
+                if (self._is_percolating[1]) and not done[1]:
+                    pc[1] += w*float(n)/float(self._nsites)
+                    done[1] = True
+                if (self._is_percolating[2]) and not done[2]:
+                    pc[2] += w*float(n)/float(self._nsites)
+                    done[2] = True
+                if np.all(done):
+                    pc_all += w*float(n)/float(self._nsites)
+                    if file_name:
+                        self.save_cluster(self._largest, 
+                             file_name=(file_name+(".%05d"%(i,))))
+                    break
+
+        print(" done.\n")
+
+        return (pc, pc_all)
+
+    def check_if_percolating(self):
+        """
+        Check, if the largest cluster is percolating.
+        """
+
+        cl = self._largest
+        cmin = np.zeros(3)
+        cmax = np.zeros(3)
+
+        self._is_percolating = [False, False, False]
+
+        i = self._first[cl]
+        while self._next[i] >=0:
+            i = self._next[i]
+            vec = self._vec[i]
+            cmin = np.where(cmin <= vec, cmin, vec)
+            cmax = np.where(cmax >= vec, cmax, vec)
+            self._is_percolating = (cmax - cmin > 1.0)
+            if np.all(self._is_percolating):
+                break
+
+    def save_cluster(self, cluster, file_name="CLUSTER"):
+        """
+        Save a particular cluster to an output file.
+        Relies on `pymatgen' for the file I/O.
+        """
+
+        from pymatgen.core.structure import Structure
+        from pymatgen.io.vaspio      import Poscar
+
+        species = ["H" for i in range(self._nsites)]
+        i = self._first[cluster]
+        species[i] = "C"
+        while (self._next[i] >= 0):
+            i = self._next[i]
+            species[i] = "C"
+
+        species = np.array(species)
+        idx = np.argsort(species)
+
+        struc = Structure(self._avec, species[idx], self._coo[idx])
+        poscar = Poscar(struc)
+        poscar.write_file(file_name)
+
+    def save_neighbors(self, site, file_name="NEIGHBORS"):
+        """
+        Save neighbors of site SITE to an output file.
+        """
+
+        from pymatgen.core.structure import Structure
+        from pymatgen.io.vaspio      import Poscar
+
+        species = ["H" for i in range(self._nsites)]
+        species[site] = "C"
+        for nb in self._neighbors[site]:
+            species[nb] = "C"
+
+        species = np.array(species)
+        idx = np.argsort(species)
+
+        struc = Structure(self._avec, species[idx], self._coo[idx])
+        poscar = Poscar(struc)
+        poscar.write_file(file_name)
+
+
+    def get_cluster(self, site, visited=[]):
+        """
+        Recursively determine all other sites connected to SITE.
+        """
+
+        if (self._cluster[site] < 0):
+            return visited
+        
+        visited.append(site)
+        for nb in self._neighbors[site]:
+            if ((not (nb in visited)) and (self._cluster[nb] >= 0)):
+                visited += self.get_cluster(nb, visited)[len(visited):]
+
+        return visited
+        
 
     #------------------------------------------------------------------#
     #                         private methods                          #
@@ -201,7 +341,7 @@ class Percolator(object):
 
         nblist = NeighborList(self._avec, self._coo)
         
-        for i in range(self._nsites):
+        for i in xrange(self._nsites):
             (nbl, dist, T) = nblist.get_neighbors_and_distances(i)
             nbs[i]   = nbl
             Tvecs[i] = T
@@ -228,11 +368,10 @@ class Percolator(object):
         i = self._first[cluster2]
         self._vec[i, :] += vec
         self._cluster[i] = cluster1
-        if (i>=0):
-            while (self._next[i] >= 0):
-                i = self._next[i]
-                self._vec[i,:] += vec
-                self._cluster[i] = cluster1
+        while (self._next[i] >= 0):
+            i = self._next[i]
+            self._vec[i,:] += vec
+            self._cluster[i] = cluster1
 
         # insert second cluster right after the head node in 
         # cluster 1
@@ -242,13 +381,25 @@ class Percolator(object):
 
         # keep track of the cluster sizes and the largest cluster
         self._size[cluster1] += self._size[cluster2]
-        self._size[cluster2] = 0
-        self._largest = max(self._largest, self._size[cluster1])
+        if (self._size[cluster1] > self._size[self._largest]):
+            self._largest = cluster1
 
-        # Do not delete the cluster here, but rather disable it.
+        # Only delete the cluster, if it is the last in the list.
         # Otherwise we would have to update the cluster IDs on all sites.
-        self._first[cluster2] = -1
         self._nclusters -= 1
+        if (len(self._first) == cluster2+1):
+            del self._first[cluster2]
+            del self._size[cluster2]
+        else:
+            self._first[cluster2] = -1
+            self._size[cluster2]  = 0
+
+
+
+
+
+
+
 
 
 

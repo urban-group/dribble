@@ -131,7 +131,7 @@ class NeighborList(object):
           No distances are computed, so not IDs in the list have
           to be within range.
         """
-
+        
         bid_home = self._box[i]
         nbl = self._box_contents(bid_home)
         # remove the original atom from the list
