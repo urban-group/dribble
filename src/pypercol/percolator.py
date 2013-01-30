@@ -210,29 +210,39 @@ class Percolator(object):
         Determine an estimate for the site percolation threshold p_c.
         """
 
-        print("Calculating an estimate for the percolation point p_c.")
-        print("Averaging over {} samples:\n".format(samples))
+        print(" Calculating an estimate for the percolation point p_c.")
+        print(" Averaging over {} samples:\n".format(samples))
 
-        pc     = np.array([0.0, 0.0, 0.0])
+        print( " 0%                25%                 "
+             + "50%                 75%                 100%" )
+        print(" ", end="")
+
+        nprint = round(samples/80)
+
+        pc_any = 0.0
+        pc_one = 0.0
+        pc_two = 0.0
         pc_all = 0.0
+
         w = 1.0/float(samples)
         for i in xrange(samples):
-            print(".", end="")
+            if (i % nprint == 0):
+                print("|", end="")
             self.reset()
-            done = [False, False, False]
+            done_any = done_one = done_two = False
             for n in xrange(self._nsites):
                 self.add_percolating_site()
                 self.check_if_percolating()
-                if (self._is_percolating[0]) and not done[0]:
-                    pc[0] += w*float(n)/float(self._nsites)
-                    done[0] = True
-                if (self._is_percolating[1]) and not done[1]:
-                    pc[1] += w*float(n)/float(self._nsites)
-                    done[1] = True
-                if (self._is_percolating[2]) and not done[2]:
-                    pc[2] += w*float(n)/float(self._nsites)
-                    done[2] = True
-                if np.all(done):
+                if (np.any(self._is_percolating)) and not done_any:
+                    pc_any += w*float(n)/float(self._nsites)
+                    done_any = True
+                if (np.sum(np.where(self._is_percolating,1,0))>=1) and not done_one:
+                    pc_one += w*float(n)/float(self._nsites)
+                    done_one = True
+                if (np.sum(np.where(self._is_percolating,1,0))>=2) and not done_two:
+                    pc_two += w*float(n)/float(self._nsites)
+                    done_two = True
+                if np.all(self._is_percolating):
                     pc_all += w*float(n)/float(self._nsites)
                     if file_name:
                         self.save_cluster(self._largest, 
@@ -241,7 +251,7 @@ class Percolator(object):
 
         print(" done.\n")
 
-        return (pc, pc_all)
+        return (pc_any, pc_one, pc_two, pc_all)
 
     def check_if_percolating(self):
         """
@@ -328,7 +338,7 @@ class Percolator(object):
     #                         private methods                          #
     #------------------------------------------------------------------#
 
-    def _build_neighbor_list(self, dr=0.2):
+    def _build_neighbor_list(self, dr=0.1):
         """
         Determine the list of neighboring sites for 
         each site of the lattice.  Allow the next neighbor
@@ -342,7 +352,7 @@ class Percolator(object):
         nblist = NeighborList(self._avec, self._coo)
         
         for i in xrange(self._nsites):
-            (nbl, dist, T) = nblist.get_neighbors_and_distances(i)
+            (nbl, dist, T) = nblist.get_nearest_neighbors(i, dr=dr)
             nbs[i]   = nbl
             Tvecs[i] = T
             dNN[i]   = np.min(dist)

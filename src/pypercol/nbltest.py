@@ -19,12 +19,20 @@ def nbltest(infile):
     structure = Poscar.from_file(infile).structure
     nbl = NeighborList.from_structure(structure)
 
-    for i in np.random.random_integers(0,nbl.num_coords-1, 10):
-        nbs = nbl.get_neighbors_and_distances(i)
-        print i
-        print len(nbs)
-        print nbs
-        
+    rand = np.random.random_integers(0,nbl.num_coords-1, 50)
+
+    for i in rand:
+        # (nl1, dist1, T1) = nbl.get_neighbors_and_distances(i)
+        (nl1, dist1, T1) = nbl.get_nearest_neighbors(i)
+        (nl2, dist2, T2) = nbl.get_neighbors_and_distances_OLD(i)
+        for j in range(len(nl1)):
+            k = np.where(nl2==nl1[j])[0][0]
+            diff = np.sum(np.abs(T1[j] - T2[k]))
+            if diff > 0:
+                print T1[j], T2[k]
+            diff = abs(dist1[j] - dist2[k])
+            if diff > 0.0000001:
+                print dist1[j], dist2[k]
     
 
 #----------------------------------------------------------------------#

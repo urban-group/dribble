@@ -8,6 +8,7 @@ __author__ = "Alexander Urban"
 __date__   = "2013-01-19"
 
 import numpy as np
+# from pytiming import timing
 
 FINAL = -1
 EPS   = 100.0*np.finfo(np.float).eps
@@ -55,7 +56,7 @@ class NeighborList(object):
         self._next       = np.zeros(self._ncoo, dtype=int)
 
         # determine `star' of periodic lattice cells within range
-        self._T_latt = self.star_setup(self._avec, self._range)
+        self._T_latt = np.array([[0,0,0]] + self.star_setup(self._avec, self._range))
             
         # determine `star' of boxes that has to be checked for neighbors
         avec_box     = self._avec.copy()
@@ -164,7 +165,107 @@ class NeighborList(object):
 
         return nbl
 
-    def get_neighbors_and_distances(self, i, dr=0.1):
+    def get_neighbors_and_distances(self, i, r=None):
+        """
+        Get a list of coordinates within the interaction range.
+
+        Arguments:
+          i     the index of the coordinate, i.e., i of `coords[i]'
+
+        Returns:
+          tuple (nbl, dist, Tvecs) where `nbl' is a list of the neighbors,
+          `dist' is a list of the corresponding distances, and `Tvecs'
+          is a list of the corresponding translation vectors.
+
+          NoteL `nbl' may contain redundant entries that belong to
+          different translation vectors and distances.
+        """
+
+        nbl   = []
+        dist  = []
+        Tvecs = []
+
+        if r and (r <= self._range):
+            r2 = r*r
+        elif self._range:
+            r2 = self._range*self._range
+        else:
+            print("Error: no range specified.")
+            print("Use: get_nearest_neighbors() instead")
+            return
+
+        coo_i = self._coo[i]
+        coo_i_T = -self._T_latt + coo_i
+        coo_i_T = np.dot(coo_i_T, self._avec)
+
+        possible = self.get_possible_neighbors(i)
+
+        for j in possible:
+            coo_j = np.dot(self._coo[j], self._avec)
+            v_ij = coo_i_T - coo_j
+            d2 = np.sum(v_ij*v_ij, axis=1)
+            idx = (d2 <= r2)
+            if np.any(idx):
+                dist  += list(np.sqrt(d2[idx]))
+                Tvecs += list(self._T_latt[idx])
+                nbl   += len(d2[idx])*[j]
+
+        return (nbl, dist, Tvecs)
+
+    def get_nearest_neighbors(self, i, dr=0.1):
+        """
+        Get a list of coordinates of the nearest neighbors of atom i.
+
+        Arguments:
+          i     the index of the coordinate, i.e., i of `coords[i]'
+          dr    allowed fluctuations in the nearest neighbor distance
+
+        Returns:
+          tuple (nbl, dist, Tvecs) where `nbl' is a list of the neighbors,
+          `dist' is a list of the corresponding distances, and `Tvecs'
+          is a list of the corresponding translation vectors.
+
+          NoteL `nbl' may contain redundant entries that belong to
+          different translation vectors and distances.
+
+          Also note: if filtering for nearest neighbors, the output
+          quantities `nbl', `dist', and `Tvecs' will all be ndarrays.
+
+        """
+
+        nbl   = []
+        dist  = []
+        Tvecs = []
+
+        coo_i = self._coo[i]
+        coo_i_T = -self._T_latt + coo_i
+        coo_i_T = np.dot(coo_i_T, self._avec)
+
+        possible = self.get_possible_neighbors(i)
+
+        d_min_min = np.linalg.norm(np.dot((1.0,1.0,1.0),self._avec))
+
+        for j in possible:
+            coo_j = np.dot(self._coo[j], self._avec)
+            v_ij = coo_i_T - coo_j
+            d2 = np.sum(v_ij*v_ij, axis=1)
+            d_min = np.sqrt(np.min(d2))
+            if d_min + dr < d_min_min:
+                nbl = []
+                dist = []
+                Tvecs = []
+            d_min_min = min(d_min, d_min_min)
+            if d_min > d_min_min + dr:
+                continue
+            idx = (d2 <= (d_min_min+dr)**2)
+            if np.any(idx):
+                dist  += list(np.sqrt(d2[idx]))
+                Tvecs += list(self._T_latt[idx])
+                nbl   += len(d2[idx])*[j]
+
+        return (nbl, dist, Tvecs)
+
+    def get_neighbors_and_distances_OLD(self, i, dr=0.1):
         """
         Get a list of coordinates within the interaction range.
 

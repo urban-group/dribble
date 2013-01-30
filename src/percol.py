@@ -17,23 +17,25 @@ from pypercol import Percolator
 
 #----------------------------------------------------------------------#
 
-def percol(poscarfile, percolating='Li'):
+def percol(poscarfile, samples):
 
-    print("\nInitializing structure and percolator ... ", end="")
+    print("\n Initializing structure and percolator ... ", end="")
 
     struc = Poscar.from_file(poscarfile).structure
     percolator = Percolator.from_structure(struc)
 
     print("done.\n")
 
-    print("MC percolation simulation\n")
+    print(" MC percolation simulation\n")
 
-    (pc, pc_all) = percolator.find_percolation_point(
-        samples=500, file_name="./clusters/POSCAR")
-    print("pc1 = {}".format(pc[0]))
-    print("pc2 = {}".format(pc[1]))
-    print("pc3 = {}".format(pc[2]))
-    print("pc  = {}".format(pc_all))
+    (pc_any, pc_one, pc_two, pc_all
+    ) = percolator.find_percolation_point(samples=samples)
+
+    print(" Percolating in any direction at  p_c = {}".format(pc_any))
+    print(" Percolating in one direction at  p_c = {}".format(pc_one))
+    print(" Percolating in two directions at p_c = {}".format(pc_two))
+    print(" Percolating in all directions at p_c = {}".format(pc_all))
+
     print("")
 
 
@@ -50,10 +52,10 @@ if (__name__ == "__main__"):
         nargs   = "?")
 
     parser.add_argument(
-        "--percolating", "-p",
-        help    = "the percolating species",
-        dest    = "percolating",
-        default = "Li" )
+        "--samples",
+        help    = "number of samples to be averaged",
+        type    = int,
+        default = 500)
 
     parser.add_argument(
         "--debug",
@@ -66,7 +68,7 @@ if (__name__ == "__main__"):
         np.random.seed(seed=1)
 
     percol( poscarfile  = args.structure, 
-            percolating = args.percolating )
+            samples     = args.samples )
 
 
 
