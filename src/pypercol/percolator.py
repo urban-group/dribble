@@ -9,6 +9,8 @@ from pynblist import NeighborList
 from aux      import binom_conv
 from scipy.stats import binom
 
+EPS   = 100.0*np.finfo(np.float).eps
+
 #----------------------------------------------------------------------#
 
 class Percolator(object):
@@ -379,20 +381,22 @@ class Percolator(object):
         Add sites of cluster2 to cluster1.
         """
 
-        if (cluster1 == cluster2):
-            if T2[0] != 0:
-                self._is_spanning[cluster1][0] = True
-            if T2[1] != 0:
-                self._is_spanning[cluster1][1] = True
-            if T2[2] != 0:
-                self._is_spanning[cluster1][2] = True
-            return
-
         # vector from head node of cluster2 to head of cluster1
         v_12 = (self._coo[site2] + T2) - self._coo[site1]
         vec  = self._vec[site1] - v_12 - self._vec[site2]
         
-        # add this vector to all elements of the second cluster
+        if (cluster1 == cluster2):
+            # if `vec' is different from the stored vector, we have
+            # a wrapping cluster
+            if abs(vec[0]) > 100*EPS:
+                self._is_spanning[cluster1][0] = True
+            if abs(vec[1]) > 100*EPS:
+                self._is_spanning[cluster1][1] = True
+            if abs(vec[2]) > 100*EPS:
+                self._is_spanning[cluster1][2] = True
+            return
+
+        # add vec to all elements of the second cluster
         # and change their cluster ID
         i = self._first[cluster2]
         self._vec[i, :] += vec
