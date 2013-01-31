@@ -17,7 +17,7 @@ from pypercol import Percolator
 
 #----------------------------------------------------------------------#
 
-def percol(poscarfile, samples):
+def percol(poscarfile, samples, save_clusters):
 
     print("\n Initializing structure and percolator ... ", end="")
 
@@ -28,13 +28,17 @@ def percol(poscarfile, samples):
 
     print(" MC percolation simulation\n")
 
-    (pc_any, pc_one, pc_two, pc_all
-    ) = percolator.find_percolation_point(samples=samples)
+    if save_clusters:
+        (pc_any, pc_two, pc_all
+         ) = percolator.find_percolation_point(
+             samples=samples, file_name='./clusters/POSCAR')
+    else:
+        (pc_any, pc_two, pc_all
+         ) = percolator.find_percolation_point(samples=samples)
 
-    print(" Percolating in any direction at  p_c = {}".format(pc_any))
-    print(" Percolating in one direction at  p_c = {}".format(pc_one))
-    print(" Percolating in two directions at p_c = {}".format(pc_two))
-    print(" Percolating in all directions at p_c = {}".format(pc_all))
+    print(" Percolating in any direction at           p = {}".format(pc_any))
+    print(" Percolating in at least two directions at p = {}".format(pc_two))
+    print(" Percolating in all three directions at    p = {}".format(pc_all))
 
     print("")
 
@@ -58,6 +62,11 @@ if (__name__ == "__main__"):
         default = 500)
 
     parser.add_argument(
+        "--save_clusters",
+        help    = "write out percolating clusters",
+        action  = "store_true")
+
+    parser.add_argument(
         "--debug",
         help    = "run in debugging mode",
         action  = "store_true" )
@@ -67,8 +76,9 @@ if (__name__ == "__main__"):
     if args.debug:
         np.random.seed(seed=1)
 
-    percol( poscarfile  = args.structure, 
-            samples     = args.samples )
+    percol( poscarfile    = args.structure, 
+            samples       = args.samples,
+            save_clusters = args.save_clusters)
 
 
 

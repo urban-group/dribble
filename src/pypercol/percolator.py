@@ -7,6 +7,7 @@ import sys
 
 from pynblist import NeighborList
 from aux      import binom_conv
+from scipy.stats import binom
 
 #----------------------------------------------------------------------#
 
@@ -69,39 +70,36 @@ class Percolator(object):
 
         """              internal dynamic data
 
-        _cluster[i]   ID of cluster that site i belongs to; < 0, if
-                      site i is vacant
-        _nclusters    total number of clusters with more than 0 sites
-                      Note: len(_first) can be larger than this !
-        _first[i]     first site (head) of the i-th cluster
-        _size[i]      size of cluster i (i.e., number of sites in i)
-        _next[i]      the next site in the same cluster as site i;
-                      < 0, if site i is the final site
-        _vec[i][j]    j-th component of the vector that connects
-                      site i with the head site of the cluster
+        _cluster[i]     ID of cluster that site i belongs to; < 0, if
+                        site i is vacant
+        _nclusters      total number of clusters with more than 0 sites
+                        Note: len(_first) can be larger than this !
+        _first[i]       first site (head) of the i-th cluster
+        _size[i]        size of cluster i (i.e., number of sites in i)
+        _is_spanning[i][j]  True, if cluster i is spanning in direction j
+        _next[i]        the next site in the same cluster as site i;
+                        < 0, if site i is the final site
+        _vec[i][j]      j-th component of the vector that connects
+                        site i with the head site of the cluster
 
         _percolating[i]     i-th percolating site
         _nonpercolating[i]  i-th non-percolating (empty) site
 
-        _is_percolating     True, if the largest cluster is percolating;
-                            value is set by check_if_percolating()
-
         """
 
-        self._cluster    = np.empty(self._nsites, dtype=int)
-        self._cluster[:] = -1
-        self._nclusters  = 0
-        self._first      = []
-        self._size       = []
-        self._largest    = -1
-        self._next       = np.empty(self._nsites, dtype=int)
-        self._next[:]    = -1
-        self._vec        = np.zeros(self._coo.shape)
+        self._cluster     = np.empty(self._nsites, dtype=int)
+        self._cluster[:]  = -1
+        self._nclusters   = 0
+        self._first       = []
+        self._size        = []
+        self._is_spanning = []
+        self._largest     = -1
+        self._next        = np.empty(self._nsites, dtype=int)
+        self._next[:]     = -1
+        self._vec         = np.zeros(self._coo.shape)
 
         self._percolating    = []
         self._nonpercolating = range(self._nsites)
-
-        self._is_percolating = [False, False, False]
 
     #------------------------------------------------------------------#
     #                            properties                            #
@@ -149,6 +147,7 @@ class Percolator(object):
         # for the moment, add a new cluster
         self._first.append(site)
         self._size.append(1)
+        self._is_spanning.append([False, False, False])
         self._cluster[site] = len(self._first) - 1
         self._nclusters += 1
         self._vec[site, :]  = [0.0, 0.0, 0.0]
@@ -162,7 +161,7 @@ class Percolator(object):
         for i in xrange(len(self._neighbors[site])):
             nb = self._neighbors[site][i]
             cl = self._cluster[nb]
-            if (cl >= 0) and (cl != self._cluster[site]):
+            if (cl >= 0):
                 self._merge_clusters(cl, nb, self._cluster[site], 
                                      site, -self._T_vectors[site][i])
                     
@@ -217,41 +216,55 @@ class Percolator(object):
              + "50%                 75%                 100%" )
         print(" ", end="")
 
-        nprint = round(samples/80)
+        nprint = int(max(round(samples/80), 1))
+        nbar   = int(max(round(80/samples), 1))
 
         pc_any = 0.0
-        pc_one = 0.0
         pc_two = 0.0
         pc_all = 0.0
+
+        p = {}
 
         w = 1.0/float(samples)
         for i in xrange(samples):
             if (i % nprint == 0):
-                print("|", end="")
+                print(nbar*"|", end="")
             self.reset()
-            done_any = done_one = done_two = False
+            done_any = done_two = False
             for n in xrange(self._nsites):
                 self.add_percolating_site()
-                self.check_if_percolating()
-                if (np.any(self._is_percolating)) and not done_any:
+                spanning = self._is_spanning[self._largest]
+                if (np.any(spanning)) and not done_any:
                     pc_any += w*float(n)/float(self._nsites)
                     done_any = True
-                if (np.sum(np.where(self._is_percolating,1,0))>=1) and not done_one:
-                    pc_one += w*float(n)/float(self._nsites)
-                    done_one = True
-                if (np.sum(np.where(self._is_percolating,1,0))>=2) and not done_two:
-                    pc_two += w*float(n)/float(self._nsites)
-                    done_two = True
-                if np.all(self._is_percolating):
-                    pc_all += w*float(n)/float(self._nsites)
                     if file_name:
                         self.save_cluster(self._largest, 
-                             file_name=(file_name+(".%05d"%(i,))))
+                             file_name=(file_name+("-1.%05d"%(i,))))
+                if (np.sum(np.where(spanning,1,0))>=2) and not done_two:
+                    pc_two += w*float(n)/float(self._nsites)
+                    done_two = True
+                    if file_name:
+                        self.save_cluster(self._largest, 
+                             file_name=(file_name+("-2.%05d"%(i,))))
+                if np.all(spanning):
+                    pc_all += w*float(n)/float(self._nsites)
+                    if p.has_key(n):
+                        p[n] += w
+                    else:
+                        p[n]  = w
+                    if file_name:
+                        self.save_cluster(self._largest, 
+                             file_name=(file_name+("-3.%05d"%(i,))))
                     break
+                if n == self._nsites-1:
+                    print("Error: You should never reach this point!")
+                    self.save_cluster(self._largest, file_name="POSCAR-M")
+                    print(spanning)
+                    sys.exit()
 
         print(" done.\n")
-
-        return (pc_any, pc_one, pc_two, pc_all)
+      
+        return (pc_any, pc_two, pc_all)
 
     def check_if_percolating(self):
         """
@@ -270,7 +283,7 @@ class Percolator(object):
             vec = self._vec[i]
             cmin = np.where(cmin <= vec, cmin, vec)
             cmax = np.where(cmax >= vec, cmax, vec)
-            self._is_percolating = (cmax - cmin > 1.0)
+            self._is_percolating = (cmax - cmin >= 1.0)
             if np.all(self._is_percolating):
                 break
 
@@ -367,6 +380,12 @@ class Percolator(object):
         """
 
         if (cluster1 == cluster2):
+            if T2[0] != 0:
+                self._is_spanning[cluster1][0] = True
+            if T2[1] != 0:
+                self._is_spanning[cluster1][1] = True
+            if T2[2] != 0:
+                self._is_spanning[cluster1][2] = True
             return
 
         # vector from head node of cluster2 to head of cluster1
@@ -394,16 +413,22 @@ class Percolator(object):
         if (self._size[cluster1] > self._size[self._largest]):
             self._largest = cluster1
 
+        # keep track of the spanning property
+        l1 = self._is_spanning[cluster1]
+        l2 = self._is_spanning[cluster2]
+        self._is_spanning[cluster1] = [l1[i] or l2[i] for i in range(len(l1))]
+
         # Only delete the cluster, if it is the last in the list.
         # Otherwise we would have to update the cluster IDs on all sites.
         self._nclusters -= 1
         if (len(self._first) == cluster2+1):
             del self._first[cluster2]
             del self._size[cluster2]
+            del self._is_spanning[cluster2]
         else:
             self._first[cluster2] = -1
             self._size[cluster2]  = 0
-
+            self._is_spanning[cluster2] = [False, False, False]
 
 
 

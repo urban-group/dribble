@@ -8,7 +8,8 @@ __author__ = "Alexander Urban"
 __date__   = "2013-01-22"
 
 import numpy as np
-import scipy.special
+#import scipy.special
+from scipy.stats import binom
 
 def sigmoidal1(x, x0, y0, A, c):
     """
@@ -56,7 +57,9 @@ def binom_conv(fn, n, N, p):
     """
     
     fp = 0.0
+    pdf = binom(N, p)
     for i in range(len(n)):
-      fp += scipy.special.binom(N,n[i])*p**n[i]*(1.0-p)**(N-n[i])*fn[i]
+        fp += pdf.pmf(n)*fn[i]
+#        fp += scipy.special.binom(N,n[i])*p**n[i]*(1.0-p)**(N-n[i])*fn[i]
     return fp
 
