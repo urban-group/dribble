@@ -4,12 +4,79 @@
 Insert description here.
 """
 
+from __future__ import print_function
+
 __author__ = "Alexander Urban"
 __date__   = "2013-01-22"
 
+import sys
+import os
+
 import numpy as np
-#import scipy.special
-from scipy.stats import binom
+
+#----------------------------------------------------------------------#
+#                           unbuffered print                           #
+#----------------------------------------------------------------------#
+
+unbuffered = os.fdopen(sys.stdout.fileno(), 'w', 0)
+def uprint(string, **kwargs):
+    """
+    This function is basically the regular (Python 3) print function, 
+    but it does not buffer the output.
+
+    Note: the keyword argument `file' of the print function is
+          not available (connected to stdout).
+    """
+    print(string, file=unbuffered, **kwargs)
+
+#----------------------------------------------------------------------#
+#                          ASCII progress bar                          #
+#----------------------------------------------------------------------#
+
+class ProgressBar(object):
+
+    def __init__(self, N, char=u"\u25ae"):
+        """
+        Start a simple ASCII progress bar to indicate the progress
+        of the MC calculation.  Use together with _print_progress_bar.
+
+        Arguments:
+          N     number of samples until 100%
+          char  the character used to draw the progress bar
+        """
+        
+        uprint( " 0%                25%                 "
+              + "50%                 75%                 100%" )
+        uprint(" ", end="")
+
+        self._steps  = N
+        self._nprint = int(max(round(float(N)/80.0), 1))
+        self._nchar  = int(max(round(80.0/float(N)), 1))
+        self._char   = char[0]
+        self._count  = -1
+
+    def __call__(self):
+        """
+        Print next mark or finish the progress bar.
+        """
+
+        self._count += 1
+
+        if self._count == self._steps:
+            uprint(" done.\n")
+
+        if self._count > self._steps:
+            return
+
+        if (self._count % self._nprint == 0):
+            uprint(self._nchar*self._char.encode("utf-8"), end="")
+
+    
+
+
+#----------------------------------------------------------------------#
+#                              functions                               #
+#----------------------------------------------------------------------#
 
 def sigmoidal1(x, x0, y0, A, c):
     """
@@ -41,25 +108,4 @@ def sigmoidal2(x, x0, y0, A, c):
     
     return A/(1.0 + np.exp(-c*(x-x0))) + y0
 
-def binom_conv(fn, n, N, p):
-    """
-    Binomial convolution of a data series.
-           __   
-           \    / N \    n        N-n
-    f(p) = /_  |     |  p  (1 - p)    f(n)
-            n   \ n /
-
-    Arguments:
-      fn    list of function values f(n_i)
-      n     list of discrete nodes {n_i} where 0 <= n_i <= N
-      N     maximum value of n_i
-      p     continous value to evaluate the distribution at
-    """
-    
-    fp = 0.0
-    pdf = binom(N, p)
-    for i in range(len(n)):
-        fp += pdf.pmf(n)*fn[i]
-#        fp += scipy.special.binom(N,n[i])*p**n[i]*(1.0-p)**(N-n[i])*fn[i]
-    return fp
 

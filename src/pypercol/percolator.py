@@ -1,16 +1,18 @@
 from __future__ import print_function
 
 import numpy as np
-from sys import stderr
-
 import sys
 
-from pynblist import NeighborList
-from aux      import binom_conv
+from sys         import stderr
 from scipy.stats import binom
+from pynblist    import NeighborList
+from aux         import uprint
+from aux         import ProgressBar
 
 EPS   = 100.0*np.finfo(np.float).eps
 
+#----------------------------------------------------------------------#
+#                           Percolator class                           #
 #----------------------------------------------------------------------#
 
 class Percolator(object):
@@ -134,7 +136,7 @@ class Percolator(object):
         """
 
         if (self.num_nonpercolating <= 0):
-            print("Warning: can not add further sites")
+            stderr.write("Warning: all sites are already occupied\n")
             return
 
         if not site:
@@ -169,68 +171,135 @@ class Percolator(object):
                     
     def calc_p_infinity(self, plist, samples=500, save_discrete=False):
         """
-        Calculate and return estimate for P_infinity.
+        Calculate a Monte-Carlo estimate for the probability P_inf 
+        to find an infinitly extended cluster along with the percolation
+        susceptibility Chi.
 
         Arguments:
-          plist     list with desired probability points
-          samples   number of samples to average over
+          plist          list with desired probability points p; 0 < p < 1
+          samples        number of samples to average the MC result over
+          save_discrete  if True, save the discrete, supercell dependent
+                         values as well (file: discrete.dat)
+
+        Returns:
+          tuple (P_inf, Chi), with lists of P_inf and Chi values 
+          that correspond to the desired probabilities in `plist'
         """
 
-        print("Calculating P_infinity (averaging over {} samples):\n".format(samples))
+        uprint(" Calculating P_infty(p) and Chi(p).")
+        uprint(" Averaging over {} samples:\n".format(samples))
+
+        pb = ProgressBar(samples)
 
         Pn = np.zeros(self._nsites)
-        w = 1.0/float(samples)
+        Xn = np.zeros(self._nsites)
+        w  = 1.0/float(samples)
+        w2 = w*float(self._nsites)
         for i in xrange(samples):
-            print(".", end="")
+            pb()
             self.reset()
             for n in xrange(self._nsites):
                 self.add_percolating_site()
                 Pn[n] += w*(float(self._size[self._largest])/float(self.num_percolating))
+                for cl in xrange(len(self._size)):
+                    if cl == self._largest:
+                        continue
+                    Xn[n] += w2*self._size[cl]**2/float(n)
 
-        print(" done.\n")
+        pb()
 
         if save_discrete:
             fname = 'discrete.dat'
-            print("Saving discrete data to file: {}".format(fname))
+            uprint("Saving discrete data to file: {}".format(fname))
+            with open(fname, "w") as f:
+                for n in xrange(self._nsites):
+                    f.write("{} {} {}\n".format(n+1, Pn[n], Xn[n]))
+
+        uprint(" Return convolution with a binomial distribution.\n")
+
+        nlist = np.arange(1, self._nsites+1, dtype=int)
+        Pp = np.empty(len(plist))
+        Xp = np.empty(len(plist))
+        for i in xrange(len(plist)):
+            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
+            Xp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Xn)
+        
+        return (Pp, Xp)
+
+    def calc_p_wrapping(self, plist, samples=500, save_discrete=False):
+        """
+        Calculate a Monte-Carlo estimate for the probability P_wrap
+        to find a wrapping cluster.
+
+        Arguments:
+          plist          list with desired probability points p; 0 < p < 1
+          samples        number of samples to average the MC result over
+          save_discrete  if True, save the discrete, supercell dependent
+                         values as well (file: discrete-wrap.dat)
+
+        Returns:
+          tuple (P_wrap, P_wrap_c)
+          P_wrap         list of values of P_wrap that corespond to `plist'
+          P_wrap_c       the cumulative of P_wrap
+        """
+
+        uprint(" Calculating P_wrap(p).")
+        uprint(" Averaging over {} samples:\n".format(samples))
+
+        pb = ProgressBar(samples)
+
+        Pn = np.zeros(self._nsites)
+        Pnc = np.zeros(self._nsites)
+        w  = 1.0/float(samples)
+        for i in xrange(samples):
+            pb()
+            self.reset()
+            for n in xrange(self._nsites):
+                self.add_percolating_site()
+                spanning = self._is_spanning[self._largest]
+                if (np.any(spanning)):
+                    Pn[n]   += w
+                    Pnc[n:] += w
+                    break
+
+        pb()
+
+        if save_discrete:
+            fname = 'discrete-wrap.dat'
+            uprint("Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
                 for n in xrange(self._nsites):
                     f.write("{} {}\n".format(n+1, Pn[n]))
 
-        print("Return convolution with a binomial distribution.\n")
+        uprint(" Return convolution with a binomial distribution.\n")
 
-        i = 0
+        nlist = np.arange(1, self._nsites+1, dtype=int)
         Pp = np.empty(len(plist))
-        for p in plist:
-              Pp[i] = binom_conv(Pn, range(1, self._nsites+1), self._nsites, p)
-              i += 1
+        Ppc = np.empty(len(plist))
+        for i in xrange(len(plist)):
+            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
+            Ppc[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pnc)
         
-        return Pp
+        return (Pp, Ppc)
+
 
     def find_percolation_point(self, samples=500, file_name=None):
         """
         Determine an estimate for the site percolation threshold p_c.
         """
 
-        print(" Calculating an estimate for the percolation point p_c.")
-        print(" Averaging over {} samples:\n".format(samples))
+        uprint(" Calculating an estimate for the percolation point p_c.")
+        uprint(" Averaging over {} samples:\n".format(samples))
 
-        print( " 0%                25%                 "
-             + "50%                 75%                 100%" )
-        print(" ", end="")
-
-        nprint = int(max(round(samples/80), 1))
-        nbar   = int(max(round(80/samples), 1))
+        pb = ProgressBar(samples)
 
         pc_any = 0.0
         pc_two = 0.0
         pc_all = 0.0
 
-        p = {}
-
         w = 1.0/float(samples)
         for i in xrange(samples):
-            if (i % nprint == 0):
-                print(nbar*"|", end="")
+            pb()
             self.reset()
             done_any = done_two = False
             for n in xrange(self._nsites):
@@ -250,21 +319,18 @@ class Percolator(object):
                              file_name=(file_name+("-2.%05d"%(i,))))
                 if np.all(spanning):
                     pc_all += w*float(n)/float(self._nsites)
-                    if p.has_key(n):
-                        p[n] += w
-                    else:
-                        p[n]  = w
                     if file_name:
                         self.save_cluster(self._largest, 
                              file_name=(file_name+("-3.%05d"%(i,))))
                     break
                 if n == self._nsites-1:
-                    print("Error: You should never reach this point!")
-                    self.save_cluster(self._largest, file_name="POSCAR-M")
+                    stderr.write("Error: All sites occupied, but no spanning cluster!?\n")
+                    stderr.write("       Have a look at `POSCAR-Error'.\n")
+                    self.save_cluster(self._largest, file_name="POSCAR-Error")
                     print(spanning)
                     sys.exit()
 
-        print(" done.\n")
+        pb()
       
         return (pc_any, pc_two, pc_all)
 
@@ -433,15 +499,6 @@ class Percolator(object):
             self._first[cluster2] = -1
             self._size[cluster2]  = 0
             self._is_spanning[cluster2] = [False, False, False]
-
-
-
-
-
-
-
-
-
 
 class Percolator2(object):
 
