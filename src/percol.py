@@ -17,13 +17,13 @@ from pypercol.aux import uprint
 
 #----------------------------------------------------------------------#
 
-def percol(poscarfile, samples, save_clusters=False, 
-           file_name="percol.out", pc_site=False, pinf=False, pwrap=False):
+def percol(poscarfile, samples, save_clusters=False, file_name="percol.out", 
+           pc_site=False, pinf=False, pwrap=False, supercell=[1,1,1]):
 
     uprint("\n Initializing structure and percolator ... ", end="")
 
     struc = Poscar.from_file(poscarfile).structure
-    percolator = Percolator.from_structure(struc)
+    percolator = Percolator.from_structure(struc, supercell=supercell)
 
     uprint("done.\n")
 
@@ -109,6 +109,14 @@ if (__name__ == "__main__"):
         nargs   = "?")
 
     parser.add_argument(
+        "--supercell",
+        help    = "List of multiples of the lattice cell" +
+                  " in the three spacial directions",
+        type    = int,
+        default = (1,1,1),
+        nargs   = "+")
+
+    parser.add_argument(
         "--pc-site", "-p",
         help    = "Calculate critical site concentrations",
         action  = "store_true")
@@ -155,7 +163,8 @@ if (__name__ == "__main__"):
             file_name     = args.file_name,
             pc_site       = args.pc_site,
             pinf          = args.pinf,
-            pwrap         = args.pwrap )
+            pwrap         = args.pwrap,
+            supercell     = args.supercell )
 
 
 
