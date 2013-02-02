@@ -17,20 +17,30 @@ from pypercol.aux import uprint
 
 #----------------------------------------------------------------------#
 
-def percol(poscarfile, samples, save_clusters=False, file_name="percol.out", 
-           pc_site=False, pinf=False, pwrap=False, supercell=[1,1,1]):
+def percol(poscarfile, samples, save_clusters=False, 
+           file_name="percol.out", pc=False, pinf=False, pwrap=False, 
+           supercell=[1,1,1], common=0):
+
+    if not (pc or pinf or pwrap):
+        print("\n Nothing to do.")
+        print(" Please specify the quantity to be calculated.")
+        print(" Use the `--help' flag to list all options.\n")
+        sys.exit()
 
     uprint("\n Initializing structure and percolator ... ", end="")
 
     struc = Poscar.from_file(poscarfile).structure
     percolator = Percolator.from_structure(struc, supercell=supercell)
 
+    if common > 0:
+        percolator.set_special_percolation_rule(num_common=common)
+
     uprint("done.\n")
 
     uprint(" MC percolation simulation")
     uprint(" -------------------------\n")
 
-    if pc_site:
+    if pc:
 
         #--------------------------------------------------------------#
         #            calculate critical site concentrations            #
@@ -117,7 +127,7 @@ if (__name__ == "__main__"):
         nargs   = "+")
 
     parser.add_argument(
-        "--pc-site", "-p",
+        "--pc", "-p",
         help    = "Calculate critical site concentrations",
         action  = "store_true")
 
@@ -136,6 +146,12 @@ if (__name__ == "__main__"):
         help    = "number of samples to be averaged",
         type    = int,
         default = 500)
+
+    parser.add_argument(
+        "--common",
+        help    = "Number of common neighbors for two sites to be percolating.",
+        type    = int,
+        default = 0)
 
     parser.add_argument(
         "--file-name",
@@ -161,10 +177,11 @@ if (__name__ == "__main__"):
             samples       = args.samples,
             save_clusters = args.save_clusters,
             file_name     = args.file_name,
-            pc_site       = args.pc_site,
+            pc            = args.pc,
             pinf          = args.pinf,
             pwrap         = args.pwrap,
-            supercell     = args.supercell )
+            supercell     = args.supercell,
+            common        = args.common )
 
 
 

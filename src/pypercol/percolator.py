@@ -27,17 +27,20 @@ class Percolator(object):
                              spacial directions
         """
 
-        """                    static data
+        """                    static data 
 
         _avec[i][j]   j-th component of the i-th lattice vector
         _coo[i][j]    j-th component of the coordinates of the i-th 
                       lattice site
         _nsites       total number of lattice sites
 
+        _special      True, if special percolation rules have been defined
+
         _dNN[i]             nearest neighbor distance from the i-th site
         _neighbors[i][j]    j-th neighbor site of site i
         _T_vectors[i][j]    the translation vector belonging to 
                             _neighbors[i][j]
+        _nbonds_tot         maximum number of possible bonds between the sites
         """
 
         self._avec   = (np.array(lattice_vectors).T * supercell).T
@@ -54,10 +57,18 @@ class Percolator(object):
 
         self.reset()
 
+        self._special   = False
+
         self._dNN       = []
         self._neighbors = []
         self._T_vectors = []
         self._build_neighbor_list()
+
+        # max. number of bonds is half the number of nearest neighbors
+        self._nbonds_tot = 0
+        for i in xrange(self._sites):
+            self._nbonds_tot += len(set(self._neighbors[i]))
+        self._nbonds_tot /= 2
 
     @classmethod
     def from_structure(cls, structure, **kwargs):
@@ -87,6 +98,7 @@ class Percolator(object):
                         site i is vacant
         _nclusters      total number of clusters with more than 0 sites
                         Note: len(_first) can be larger than this !
+        _nbonds         the number of bonds found so far
         _first[i]       first site (head) of the i-th cluster
         _size[i]        size of cluster i (i.e., number of sites in i)
         _is_spanning[i][j]  True, if cluster i is spanning in direction j
@@ -103,6 +115,7 @@ class Percolator(object):
         self._cluster     = np.empty(self._nsites, dtype=int)
         self._cluster[:]  = -1
         self._nclusters   = 0
+        self._nbonds      = 0
         self._first       = []
         self._size        = []
         self._is_spanning = []
@@ -119,6 +132,14 @@ class Percolator(object):
     #------------------------------------------------------------------#
 
     @property
+    def largest_cluster(self):
+        return self._largest
+
+    @property
+    def neighbors(self):
+        return self._neighbors
+
+    @property
     def num_clusters(self):
         return self._nclusters
 
@@ -133,6 +154,70 @@ class Percolator(object):
     @property
     def num_sites(self):
         return self._nsites
+
+    def get_cluster_of_site(self, site, visited=[]):
+        """
+        Recursively determine all other sites connected to SITE.
+        """
+
+        if (self._cluster[site] < 0):
+            return visited
+        
+        visited.append(site)
+        for nb in self._neighbors[site]:
+
+            if ((not (nb in visited)) 
+                and (self._cluster[nb] >= 0) 
+                and self._check_special(site,nb)):
+
+                visited += self.get_cluster_of_site(nb, visited)[len(visited):]
+
+        return visited
+
+    def get_common_neighbors(self, site1, site2):
+        """
+        Returns a list of common neighbor sites of SITE1 and SITE2.
+        """
+
+        return list(set(self._neighbors[site1]) 
+                    & set(self._neighbors[site2]))
+
+    def set_special_percolation_rule(self, num_common=0):
+        """
+        Define special criteria for a bond between two occupied sites 
+        to be percolating.
+
+        Arguments:
+          num_common   number of common neighbors of two sites i and j
+                       that have to be occupied to form a percolating
+                       bond between i and j.
+        """
+
+        def new_special(site1, site2):
+            """
+            Check, if the special percolation rule is fulfilled
+            between sites SITE1 and SITE2.
+            
+            This instance does indeed define a special rule.
+            """
+
+            percolating = False
+
+            occupied = 0
+            common_neighbors = self.get_common_neighbors(site1, site2)
+
+            for nb in common_neighbors:
+                if self._cluster[nb] >= 0:
+                    occupied += 1
+                if occupied >= num_common:
+                    percolating = True
+                    break
+
+            return percolating
+
+        self._special       = True
+        self._check_special = new_special
+
 
     #------------------------------------------------------------------#
     #                          public methods                          #
@@ -177,7 +262,20 @@ class Percolator(object):
             if (cl >= 0):
                 self._merge_clusters(cl, nb, self._cluster[site], 
                                      site, -self._T_vectors[site][i])
-                    
+
+                # update also next nearest neighbors
+                # (only in case of special percolation rules)
+                if not self._special:
+                    continue
+
+                # loop over the neighbors of the neighbor
+                for j in xrange(len(self._neighbors[nb])):
+                    nb2 = self._neighbors[nb][j]
+                    cl2 = self._cluster[nb2]
+                    if (cl2 >= 0):
+                        self._merge_clusters(cl2, nb2, self._cluster[nb], 
+                                             nb, -self._T_vectors[nb][j])
+
     def calc_p_infinity(self, plist, samples=500, save_discrete=False):
         """
         Calculate a Monte-Carlo estimate for the probability P_inf 
@@ -260,6 +358,7 @@ class Percolator(object):
         Pn = np.zeros(self._nsites)
         Pnc = np.zeros(self._nsites)
         w  = 1.0/float(samples)
+        w2 = w*self._nsites
         for i in xrange(samples):
             pb()
             self.reset()
@@ -267,8 +366,8 @@ class Percolator(object):
                 self.add_percolating_site()
                 spanning = self._is_spanning[self._largest]
                 if (np.any(spanning)):
-                    Pn[n]   += w
                     Pnc[n:] += w
+                    Pn[n]   += w2
                     break
 
         pb()
@@ -291,7 +390,6 @@ class Percolator(object):
         
         return (Pp, Ppc)
 
-
     def find_percolation_point(self, samples=500, file_name=None):
         """
         Determine an estimate for the site percolation threshold p_c.
@@ -302,9 +400,13 @@ class Percolator(object):
 
         pb = ProgressBar(samples)
 
-        pc_any = 0.0
-        pc_two = 0.0
-        pc_all = 0.0
+        pc_site_any = 0.0
+        pc_site_two = 0.0
+        pc_site_all = 0.0
+
+        pc_bond_any = 0.0
+        pc_bond_two = 0.0
+        pc_bond_all = 0.0
 
         w = 1.0/float(samples)
         for i in xrange(samples):
@@ -315,33 +417,40 @@ class Percolator(object):
                 self.add_percolating_site()
                 spanning = self._is_spanning[self._largest]
                 if (np.any(spanning)) and not done_any:
-                    pc_any += w*float(n)/float(self._nsites)
+                    pc_site_any += w*float(n)/float(self._nsites)
+                    ps_bond_any += w*float(self._nbonds)/float(self._nbonds_tot)
                     done_any = True
                     if file_name:
                         self.save_cluster(self._largest, 
                              file_name=(file_name+("-1.%05d"%(i,))))
                 if (np.sum(np.where(spanning,1,0))>=2) and not done_two:
-                    pc_two += w*float(n)/float(self._nsites)
+                    pc_site_two += w*float(n)/float(self._nsites)
+                    ps_bond_two += w*float(self._nbonds)/float(self._nbonds_tot)
                     done_two = True
                     if file_name:
                         self.save_cluster(self._largest, 
                              file_name=(file_name+("-2.%05d"%(i,))))
                 if np.all(spanning):
-                    pc_all += w*float(n)/float(self._nsites)
+                    pc_site_all += w*float(n)/float(self._nsites)
+                    ps_bond_all += w*float(self._nbonds)/float(self._nbonds_tot)
                     if file_name:
                         self.save_cluster(self._largest, 
                              file_name=(file_name+("-3.%05d"%(i,))))
                     break
                 if n == self._nsites-1:
-                    stderr.write("Error: All sites occupied, but no spanning cluster!?\n")
-                    stderr.write("       Have a look at `POSCAR-Error'.\n")
+                    stderr.write(
+                        "Error: All sites occupied, but no spanning cluster!?"
+                        + "\n       "
+                        + "Maybe you defined a percolation rule that never percolates."
+                        + "\n       Have a look at `POSCAR-Error'.\n")
                     self.save_cluster(self._largest, file_name="POSCAR-Error")
                     print(spanning)
                     sys.exit()
 
         pb()
       
-        return (pc_any, pc_two, pc_all)
+        return (pc_site_any, pc_site_two, pc_site_all)
+
 
     def check_if_percolating(self):
         """
@@ -363,6 +472,7 @@ class Percolator(object):
             self._is_percolating = (cmax - cmin >= 1.0)
             if np.all(self._is_percolating):
                 break
+
 
     def save_cluster(self, cluster, file_name="CLUSTER"):
         """
@@ -408,22 +518,6 @@ class Percolator(object):
         poscar.write_file(file_name)
 
 
-    def get_cluster(self, site, visited=[]):
-        """
-        Recursively determine all other sites connected to SITE.
-        """
-
-        if (self._cluster[site] < 0):
-            return visited
-        
-        visited.append(site)
-        for nb in self._neighbors[site]:
-            if ((not (nb in visited)) and (self._cluster[nb] >= 0)):
-                visited += self.get_cluster(nb, visited)[len(visited):]
-
-        return visited
-        
-
     #------------------------------------------------------------------#
     #                         private methods                          #
     #------------------------------------------------------------------#
@@ -455,6 +549,11 @@ class Percolator(object):
         """
         Add sites of cluster2 to cluster1.
         """
+
+        if not self._check_special(site1, site2):
+            return
+
+        self._nbonds += 1
 
         # vector from head node of cluster2 to head of cluster1
         v_12 = (self._coo[site2] + T2) - self._coo[site1]
@@ -510,6 +609,18 @@ class Percolator(object):
             self._size[cluster2]  = 0
             self._is_spanning[cluster2] = [False, False, False]
 
+    def _check_special(self, site1, site2):
+        """
+        Check, if the special percolation rule is fulfilled
+        between sites SITE1 and SITE2.
+
+        However, this instance does not define any special rule.
+        """
+
+        # This method may be replaced at run-time by calling
+        # set_special_percolation_rule().
+
+        return True
 
 #----------------------------------------------------------------------#
 #                              exceptions                              #
