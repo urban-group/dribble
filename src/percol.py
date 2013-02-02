@@ -19,9 +19,9 @@ from pypercol.aux import uprint
 
 def percol(poscarfile, samples, save_clusters=False, 
            file_name="percol.out", pc=False, pinf=False, pwrap=False, 
-           supercell=[1,1,1], common=0):
+           bonds=False, supercell=[1,1,1], common=0):
 
-    if not (pc or pinf or pwrap):
+    if not (pc or pinf or pwrap or bonds):
         print("\n Nothing to do.")
         print(" Please specify the quantity to be calculated.")
         print(" Use the `--help' flag to list all options.\n")
@@ -47,16 +47,23 @@ def percol(poscarfile, samples, save_clusters=False,
         #--------------------------------------------------------------#
 
         if save_clusters:
-            (pc_any, pc_two, pc_all
+            (pc_site_any, pc_site_two, pc_site_all,
+             pc_bond_any, pc_bond_two, pc_bond_all,
             ) = percolator.find_percolation_point(
                 samples=samples, file_name=file_name+".cluster")
-        else:
-            (pc_any, pc_two, pc_all
-            ) = percolator.find_percolation_point(samples=samples)
+        else: 
+            (pc_site_any, pc_site_two, pc_site_all,
+             pc_bond_any, pc_bond_two, pc_bond_all,
+           ) = percolator.find_percolation_point(samples=samples)
 
-        uprint(" Wrapping cluster in any direction at            p = {}".format(pc_any))
-        uprint(" Wrapping cluster in at least two directions at  p = {}".format(pc_two))
-        uprint(" Wrapping cluster in all three directions at     p = {}".format(pc_all))
+        uprint(" Critical site (bond) concentrations to find a wrapping cluster\n")
+
+        uprint(" in one or more dimensions   p_c = {:.8f}  ({:.8f})".format(
+            pc_site_any, pc_bond_any))
+        uprint(" in two or three dimensions  p_c = {:.8f}  ({:.8f})".format(
+            pc_site_two, pc_bond_two))
+        uprint(" in all three dimensions     p_c = {:.8f}  ({:.8f})".format(
+            pc_site_all, pc_bond_all))
 
         uprint("")
 
@@ -101,6 +108,24 @@ def percol(poscarfile, samples, save_clusters=False,
                 f.write("  {:10.8f}   {:10.8f}   {:10.8f}\n".format(
                     plist[p], Q[p], Qc[p]))
         
+    if bonds:
+
+        #--------------------------------------------------------------#
+        #                fraction of percolating bonds                 #
+        #--------------------------------------------------------------#
+
+        plist = np.arange(0.01, 1.00, 0.01)
+        F_bonds = percolator.percolating_bonds(plist, samples=samples)
+
+        fname = file_name + ".bonds"
+        uprint(" Writing results to: {}\n".format(fname))
+
+        with open(fname, 'w') as f:
+            f.write("# {:^10s}   {:>10s}\n".format(
+                "p", "F_bonds(p)"))
+            for p in xrange(len(plist)):
+                f.write("  {:10.8f}   {:10.8f}\n".format(
+                    plist[p], F_bonds[p]))
 
     dt = time.gmtime(time.clock())
     print(" All done.  Elapsed CPU time: {:02d}h{:02d}m{:02d}s\n".format(
@@ -125,6 +150,11 @@ if (__name__ == "__main__"):
         type    = int,
         default = (1,1,1),
         nargs   = "+")
+
+    parser.add_argument(
+        "--bonds", "-b",
+        help    = "Calculate fraction of percolating bonds",
+        action  = "store_true")
 
     parser.add_argument(
         "--pc", "-p",
@@ -180,6 +210,7 @@ if (__name__ == "__main__"):
             pc            = args.pc,
             pinf          = args.pinf,
             pwrap         = args.pwrap,
+            bonds         = args.bonds,
             supercell     = args.supercell,
             common        = args.common )
 

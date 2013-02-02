@@ -38,6 +38,8 @@ class Percolator(object):
 
         _dNN[i]             nearest neighbor distance from the i-th site
         _neighbors[i][j]    j-th neighbor site of site i
+        _bonds[i][j]        True, if there is a bond between the j-th site 
+                            and its j-th neighbor
         _T_vectors[i][j]    the translation vector belonging to 
                             _neighbors[i][j]
         _nbonds_tot         maximum number of possible bonds between the sites
@@ -55,20 +57,25 @@ class Percolator(object):
         self._coo = np.array(self._coo)
         self._nsites = len(self._coo)
 
-        self.reset()
+        # self.reset()
 
         self._special   = False
 
         self._dNN       = []
         self._neighbors = []
+        self._bonds     = []
         self._T_vectors = []
         self._build_neighbor_list()
 
         # max. number of bonds is half the number of nearest neighbors
         self._nbonds_tot = 0
-        for i in xrange(self._sites):
-            self._nbonds_tot += len(set(self._neighbors[i]))
+        for i in xrange(self._nsites):
+            nbs = len(set(self._neighbors[i]))
+            self._nbonds_tot += nbs
+            self._bonds.append(np.array(nbs*[False]))
         self._nbonds_tot /= 2
+
+        self.reset()
 
     @classmethod
     def from_structure(cls, structure, **kwargs):
@@ -126,6 +133,9 @@ class Percolator(object):
 
         self._percolating    = []
         self._nonpercolating = range(self._nsites)
+
+        for i in range(self._nsites):
+            self._bonds[i][:] = False
 
     #------------------------------------------------------------------#
     #                            properties                            #
@@ -390,6 +400,52 @@ class Percolator(object):
         
         return (Pp, Ppc)
 
+    def percolating_bonds(self, plist, samples=500, save_discrete=False):
+        """
+        Estimate number of percolating bonds in dependence of site
+        concentration.
+
+        Arguments:
+          plist          list with desired probability points p; 0 < p < 1
+          samples        number of samples to average the MC result over
+          save_discrete  if True, save the discrete, supercell dependent
+                         values as well (file: discrete-wrap.dat)
+
+        Returns:
+          list of fractions of all bonds for certain concentration
+        """
+
+        uprint(" Calculating fraction F_bonds(p) of percolating bonds.")
+        uprint(" Averaging over {} samples:\n".format(samples))
+
+        pb = ProgressBar(samples)
+
+        Pn = np.zeros(self._nsites)
+        w  = 1.0/float(samples)/float(self._nbonds_tot)
+        for i in xrange(samples):
+            pb()
+            self.reset()
+            for n in xrange(self._nsites):
+                self.add_percolating_site()
+                Pn[n]   += w*float(self._nbonds)
+        pb()
+
+        if save_discrete:
+            fname = 'discrete-bonds.dat'
+            uprint("Saving discrete data to file: {}".format(fname))
+            with open(fname, "w") as f:
+                for n in xrange(self._nsites):
+                    f.write("{} {}\n".format(n+1, Pn[n]))
+
+        uprint(" Return convolution with a binomial distribution.\n")
+
+        nlist = np.arange(1, self._nsites+1, dtype=int)
+        Pp = np.empty(len(plist))
+        for i in xrange(len(plist)):
+            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
+        
+        return Pp
+        
     def find_percolation_point(self, samples=500, file_name=None):
         """
         Determine an estimate for the site percolation threshold p_c.
@@ -408,7 +464,8 @@ class Percolator(object):
         pc_bond_two = 0.0
         pc_bond_all = 0.0
 
-        w = 1.0/float(samples)
+        w1 = 1.0/float(samples)/float(self._nsites)
+        w2 = 1.0/float(samples)/float(self._nbonds_tot)
         for i in xrange(samples):
             pb()
             self.reset()
@@ -417,22 +474,22 @@ class Percolator(object):
                 self.add_percolating_site()
                 spanning = self._is_spanning[self._largest]
                 if (np.any(spanning)) and not done_any:
-                    pc_site_any += w*float(n)/float(self._nsites)
-                    ps_bond_any += w*float(self._nbonds)/float(self._nbonds_tot)
+                    pc_site_any += w1*float(n)
+                    pc_bond_any += w2*float(self._nbonds)
                     done_any = True
                     if file_name:
                         self.save_cluster(self._largest, 
                              file_name=(file_name+("-1.%05d"%(i,))))
                 if (np.sum(np.where(spanning,1,0))>=2) and not done_two:
-                    pc_site_two += w*float(n)/float(self._nsites)
-                    ps_bond_two += w*float(self._nbonds)/float(self._nbonds_tot)
+                    pc_site_two += w1*float(n)
+                    pc_bond_two += w2*float(self._nbonds)
                     done_two = True
                     if file_name:
                         self.save_cluster(self._largest, 
                              file_name=(file_name+("-2.%05d"%(i,))))
                 if np.all(spanning):
-                    pc_site_all += w*float(n)/float(self._nsites)
-                    ps_bond_all += w*float(self._nbonds)/float(self._nbonds_tot)
+                    pc_site_all += w1*float(n)
+                    pc_bond_all += w2*float(self._nbonds)
                     if file_name:
                         self.save_cluster(self._largest, 
                              file_name=(file_name+("-3.%05d"%(i,))))
@@ -449,7 +506,8 @@ class Percolator(object):
 
         pb()
       
-        return (pc_site_any, pc_site_two, pc_site_all)
+        return (pc_site_any, pc_site_two, pc_site_all,
+                pc_bond_any, pc_bond_two, pc_bond_all)
 
 
     def check_if_percolating(self):
@@ -552,8 +610,14 @@ class Percolator(object):
 
         if not self._check_special(site1, site2):
             return
-
-        self._nbonds += 1
+        
+        # remember bonds
+        nb1 = self._neighbors[site1].index(site2)
+        if not self._bonds[site1][nb1]:
+            nb2 = self._neighbors[site2].index(site1)
+            self._bonds[site1][nb1] = True
+            self._bonds[site2][nb2] = True
+            self._nbonds += 1
 
         # vector from head node of cluster2 to head of cluster1
         v_12 = (self._coo[site2] + T2) - self._coo[site1]
