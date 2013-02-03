@@ -1,0 +1,58 @@
+
+ Initializing structure and percolator ... done.
+
+ MC percolation simulation
+ -------------------------
+
+ Calculating an estimate for the percolation point p_c.
+ Averaging over 500 samples:
+
+ 0%                25%                 50%                 75%                 100%
+ ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ done.
+
+ Critical site (bond) concentrations to find a wrapping cluster
+
+ in one or more dimensions   p_c = 0.20880000  (0.04362667)
+ in two or three dimensions  p_c = 0.22526400  (0.05092267)
+ in all three dimensions     p_c = 0.26577600  (0.07106133)
+
+ Calculating P_infty(p) and Chi(p).
+ Averaging over 500 samples:
+
+ 0%                25%                 50%                 75%                 100%
+ ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ done.
+
+ Return convolution with a binomial distribution.
+
+ Writing results to: percol.infty
+
+ Calculating P_wrap(p).
+ Averaging over 500 samples:
+
+ 0%                25%                 50%                 75%                 100%
+ ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ done.
+
+ Return convolution with a binomial distribution.
+
+ Writing results to: percol.wrap
+
+ Calculating fraction F_bonds(p) of percolating bonds.
+ Averaging over 500 samples:
+
+ 0%                25%                 50%                 75%                 100%
+ ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ done.
+
+ Return convolution with a binomial distribution.
+
+ Writing results to: percol.bonds
+
+ Calculating fraction of inaccessible sites.
+ Averaging over 500 samples:
+
+ 0%                25%                 50%                 75%                 100%
+ ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ done.
+
+ Return convolution with a binomial distribution.
+
+ Writing results to: percol.inacc
+

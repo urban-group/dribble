@@ -19,9 +19,9 @@ from pypercol.aux import uprint
 
 def percol(poscarfile, samples, save_clusters=False, 
            file_name="percol.out", pc=False, pinf=False, pwrap=False, 
-           bonds=False, supercell=[1,1,1], common=0):
+           bonds=False, inaccessible=False, supercell=[1,1,1], common=0):
 
-    if not (pc or pinf or pwrap or bonds):
+    if not (pc or pinf or pwrap or bonds or inaccessible):
         print("\n Nothing to do.")
         print(" Please specify the quantity to be calculated.")
         print(" Use the `--help' flag to list all options.\n")
@@ -49,12 +49,12 @@ def percol(poscarfile, samples, save_clusters=False,
         if save_clusters:
             (pc_site_any, pc_site_two, pc_site_all,
              pc_bond_any, pc_bond_two, pc_bond_all,
-            ) = percolator.find_percolation_point(
+            ) = percolator.percolation_point(
                 samples=samples, file_name=file_name+".cluster")
         else: 
             (pc_site_any, pc_site_two, pc_site_all,
              pc_bond_any, pc_bond_two, pc_bond_all,
-           ) = percolator.find_percolation_point(samples=samples)
+           ) = percolator.percolation_point(samples=samples)
 
         uprint(" Critical site (bond) concentrations to find a wrapping cluster\n")
 
@@ -127,10 +127,31 @@ def percol(poscarfile, samples, save_clusters=False,
                 f.write("  {:10.8f}   {:10.8f}\n".format(
                     plist[p], F_bonds[p]))
 
+    if inaccessible:
+
+        #--------------------------------------------------------------#
+        #                fraction of inaccessible sites                #
+        #--------------------------------------------------------------#
+
+        plist = np.arange(0.01, 1.00, 0.01)
+        F_inacc = percolator.inaccessible_sites(plist, samples=samples)
+
+        fname = file_name + ".inacc"
+        uprint(" Writing results to: {}\n".format(fname))
+
+        with open(fname, 'w') as f:
+            f.write("# {:^10s}   {:>10s}\n".format(
+                "p", "F_inacc(p)"))
+            for p in xrange(len(plist)):
+                f.write("  {:10.8f}   {:10.8f}\n".format(
+                    plist[p], F_inacc[p]))
+
     dt = time.gmtime(time.clock())
     print(" All done.  Elapsed CPU time: {:02d}h{:02d}m{:02d}s\n".format(
         dt.tm_hour, dt.tm_min, dt.tm_sec))
 
+#----------------------------------------------------------------------#
+#                        command line arguments                        #
 #----------------------------------------------------------------------#
 
 if (__name__ == "__main__"):
@@ -154,6 +175,11 @@ if (__name__ == "__main__"):
     parser.add_argument(
         "--bonds", "-b",
         help    = "Calculate fraction of percolating bonds",
+        action  = "store_true")
+
+    parser.add_argument(
+        "--inaccessible", "-i",
+        help    = "Calculate fraction of inaccessible sites",
         action  = "store_true")
 
     parser.add_argument(
@@ -211,6 +237,7 @@ if (__name__ == "__main__"):
             pinf          = args.pinf,
             pwrap         = args.pwrap,
             bonds         = args.bonds,
+            inaccessible  = args.inaccessible,
             supercell     = args.supercell,
             common        = args.common )
 

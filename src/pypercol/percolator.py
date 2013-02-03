@@ -1,4 +1,28 @@
+""" Copyright (c) 2013 Alexander Urban 
+
+ Permission is hereby granted, free of charge, to any person obtaining a
+ copy of this software and associated documentation files (the
+ "Software"), to deal in the Software without restriction, including
+ without limitation the rights to use, copy, modify, merge, publish,
+ distribute, sublicense, and/or sell copies of the Software, and to
+ permit persons to whom the Software is furnished to do so, subject to
+ the following conditions:
+ 
+ The above copyright notice and this permission notice shall be included
+ in all copies or substantial portions of the Software.
+ 
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+ OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from __future__ import print_function
+
+__autor__ = "Alexander Urban"
 
 import numpy as np
 import sys
@@ -16,6 +40,29 @@ EPS   = 100.0*np.finfo(np.float).eps
 #----------------------------------------------------------------------#
 
 class Percolator(object):
+    """
+    The Percolator class implements a fast MC algorithm for percolation
+    analysis on regular lattices [1].  Several different methods allow 
+    the computation of various quantities related to percolation, such
+    as the percolation susceptibility, the ratio of the largest cluster
+    of sites to all occupied sites, the probability for wrapping
+    (periodic) clusters vs. the site concentration, and the percolation
+    threshold.  
+
+    See the doc string of the individual methods for details:
+
+       calc_p_infinity
+       calc_p_wrapping
+       percolating_bonds
+       inaccessible_sites
+       percolation_point
+    
+    Apart from regular percolation analyses, special percolation rules
+    can be specified using `set_special_percolation_rule()'.  This
+    allows to modify the criteria of percolating bonds.
+    
+    [1] Newman and Ziff, Phys. Rev. Lett. 85, 4104-4107 (2000).
+    """
 
     def __init__(self, lattice_vectors, frac_coords, supercell=(1,1,1)):
         """
@@ -165,6 +212,7 @@ class Percolator(object):
     def num_sites(self):
         return self._nsites
 
+
     def get_cluster_of_site(self, site, visited=[]):
         """
         Recursively determine all other sites connected to SITE.
@@ -191,6 +239,7 @@ class Percolator(object):
 
         return list(set(self._neighbors[site1]) 
                     & set(self._neighbors[site2]))
+
 
     def set_special_percolation_rule(self, num_common=0):
         """
@@ -286,6 +335,7 @@ class Percolator(object):
                         self._merge_clusters(cl2, nb2, self._cluster[nb], 
                                              nb, -self._T_vectors[nb][j])
 
+
     def calc_p_infinity(self, plist, samples=500, save_discrete=False):
         """
         Calculate a Monte-Carlo estimate for the probability P_inf 
@@ -317,11 +367,11 @@ class Percolator(object):
             self.reset()
             for n in xrange(self._nsites):
                 self.add_percolating_site()
-                Pn[n] += w*(float(self._size[self._largest])/float(self.num_percolating))
+                Pn[n] += w*(float(self._size[self._largest])/float(n+1))
                 for cl in xrange(len(self._size)):
                     if cl == self._largest:
                         continue
-                    Xn[n] += w2*self._size[cl]**2/float(n)
+                    Xn[n] += w2*self._size[cl]**2/float(n+1)
 
         pb()
 
@@ -445,8 +495,58 @@ class Percolator(object):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
         
         return Pp
+
+    def inaccessible_sites(self, plist, samples=500, save_discrete=False):
+        """
+        Estimate the number of inaccessible sites, i.e. sites that are
+        not part of a percolating cluster, for a given range of
+        concentrations.
+
+        Arguments:
+          plist          list with desired probability points p; 0 < p < 1
+          samples        number of samples to average the MC result over
+          save_discrete  if True, save the discrete, supercell dependent
+                         values as well (file: discrete-wrap.dat)
+
+        Returns:
+          list of values corresponding to probabilities in `plist'
+        """
+
+        uprint(" Calculating fraction of inaccessible sites.")
+        uprint(" Averaging over {} samples:\n".format(samples))
+
+        pb = ProgressBar(samples)
+
+        Pn = np.zeros(self._nsites)
+        w  = 1.0/float(samples)
+        for i in xrange(samples):
+            pb()
+            self.reset()
+            for n in xrange(self._nsites):
+                self.add_percolating_site()
+                wn = w/float(n+1)
+                for cl in range(len(self._size)):
+                    if not np.any(self._is_spanning[cl]):
+                        Pn[n] += wn*self._size[cl]
+        pb()
+
+        if save_discrete:
+            fname = 'discrete-inaccessible.dat'
+            uprint("Saving discrete data to file: {}".format(fname))
+            with open(fname, "w") as f:
+                for n in xrange(self._nsites):
+                    f.write("{} {}\n".format(n+1, Pn[n]))
+
+        uprint(" Return convolution with a binomial distribution.\n")
+
+        nlist = np.arange(1, self._nsites+1, dtype=int)
+        Pp = np.empty(len(plist))
+        for i in xrange(len(plist)):
+            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
         
-    def find_percolation_point(self, samples=500, file_name=None):
+        return Pp
+        
+    def percolation_point(self, samples=500, file_name=None):
         """
         Determine an estimate for the site percolation threshold p_c.
         """
@@ -474,21 +574,21 @@ class Percolator(object):
                 self.add_percolating_site()
                 spanning = self._is_spanning[self._largest]
                 if (np.any(spanning)) and not done_any:
-                    pc_site_any += w1*float(n)
+                    pc_site_any += w1*float(n+1)
                     pc_bond_any += w2*float(self._nbonds)
                     done_any = True
                     if file_name:
                         self.save_cluster(self._largest, 
                              file_name=(file_name+("-1.%05d"%(i,))))
                 if (np.sum(np.where(spanning,1,0))>=2) and not done_two:
-                    pc_site_two += w1*float(n)
+                    pc_site_two += w1*float(n+1)
                     pc_bond_two += w2*float(self._nbonds)
                     done_two = True
                     if file_name:
                         self.save_cluster(self._largest, 
                              file_name=(file_name+("-2.%05d"%(i,))))
                 if np.all(spanning):
-                    pc_site_all += w1*float(n)
+                    pc_site_all += w1*float(n+1)
                     pc_bond_all += w2*float(self._nbonds)
                     if file_name:
                         self.save_cluster(self._largest, 
@@ -508,28 +608,6 @@ class Percolator(object):
       
         return (pc_site_any, pc_site_two, pc_site_all,
                 pc_bond_any, pc_bond_two, pc_bond_all)
-
-
-    def check_if_percolating(self):
-        """
-        Check, if the largest cluster is percolating.
-        """
-
-        cl = self._largest
-        cmin = np.zeros(3)
-        cmax = np.zeros(3)
-
-        self._is_percolating = [False, False, False]
-
-        i = self._first[cl]
-        while self._next[i] >=0:
-            i = self._next[i]
-            vec = self._vec[i]
-            cmin = np.where(cmin <= vec, cmin, vec)
-            cmax = np.where(cmax >= vec, cmax, vec)
-            self._is_percolating = (cmax - cmin >= 1.0)
-            if np.all(self._is_percolating):
-                break
 
 
     def save_cluster(self, cluster, file_name="CLUSTER"):
@@ -686,18 +764,3 @@ class Percolator(object):
 
         return True
 
-#----------------------------------------------------------------------#
-#                              exceptions                              #
-#----------------------------------------------------------------------#
-
-class IncompatibleStructureException(Exception):
-    """
-    Raised, if the input structure is 
-    not compatible with the Percolator.
-    """
-
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return self.msg
