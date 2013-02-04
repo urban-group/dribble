@@ -1,0 +1,28 @@
+
+ Initializing structure and percolator ... done.
+
+ MC percolation simulation
+ -------------------------
+
+ Calculating an estimate for the percolation point p_c.
+ Averaging over 500 samples:
+
+ 0%                25%                 50%                 75%                 100%
+ ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ done.
+
+ Critical site (bond) concentrations to find a wrapping cluster
+
+ in one or more dimensions   p_c = 0.43635156  (0.19085645)
+ in two or three dimensions  p_c = 0.44752148  (0.20075000)
+ in all three dimensions     p_c = 0.46698633  (0.21860059)
+
+ Calculating P_wrap(p).
+ Averaging over 500 samples:
+
+ 0%                25%                 50%                 75%                 100%
+ ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ done.
+
+ Return convolution with a binomial distribution.
+
+ Writing results to: percol.wrap
+
