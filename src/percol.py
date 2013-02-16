@@ -19,9 +19,10 @@ from pypercol.aux import uprint
 
 def percol(poscarfile, samples, save_clusters=False, 
            file_name="percol.out", pc=False, pinf=False, pwrap=False, 
-           bonds=False, inaccessible=False, supercell=[1,1,1], common=0):
+           bonds=False, flux=False, inaccessible=False, 
+           supercell=[1,1,1], common=0):
 
-    if not (pc or pinf or pwrap or bonds or inaccessible):
+    if not (pc or pinf or pwrap or bonds or flux or inaccessible):
         print("\n Nothing to do.")
         print(" Please specify the quantity to be calculated.")
         print(" Use the `--help' flag to list all options.\n")
@@ -127,6 +128,25 @@ def percol(poscarfile, samples, save_clusters=False,
                 f.write("  {:10.8f}   {:10.8f}\n".format(
                     plist[p], F_bonds[p]))
 
+    if flux:
+
+        #--------------------------------------------------------------#
+        #                       percolation flux                       #
+        #--------------------------------------------------------------#
+
+        plist = np.arange(0.01, 1.00, 0.01)
+        flux = percolator.percolation_flux(plist, samples=samples)
+
+        fname = file_name + ".flux"
+        uprint(" Writing results to: {}\n".format(fname))
+
+        with open(fname, 'w') as f:
+            f.write("# {:^10s}   {:>10s}\n".format(
+                "p", "F_bonds(p)"))
+            for p in xrange(len(plist)):
+                f.write("  {:10.8f}   {:10.8f}\n".format(
+                    plist[p], flux[p]))
+
     if inaccessible:
 
         #--------------------------------------------------------------#
@@ -134,21 +154,21 @@ def percol(poscarfile, samples, save_clusters=False,
         #--------------------------------------------------------------#
 
         plist = np.arange(0.01, 1.00, 0.01)
-        F_inacc = percolator.inaccessible_sites(plist, samples=samples)
+        (F_inacc, nclus) = percolator.inaccessible_sites(plist, samples=samples)
 
         fname = file_name + ".inacc"
         uprint(" Writing results to: {}\n".format(fname))
 
         with open(fname, 'w') as f:
-            f.write("# {:^10s}   {:>10s}\n".format(
-                "p", "F_inacc(p)"))
+            f.write("# {:^10s}   {:>10s}   {:>10s}\n".format(
+                "p", "F_inacc(p)", "N_percol(p)"))
             for p in xrange(len(plist)):
-                f.write("  {:10.8f}   {:10.8f}\n".format(
-                    plist[p], F_inacc[p]))
+                f.write("  {:10.8f}   {:10.8f}   {:12.6f}\n".format(
+                    plist[p], F_inacc[p], nclus[p]))
 
     dt = time.gmtime(time.clock())
-    print(" All done.  Elapsed CPU time: {:02d}h{:02d}m{:02d}s\n".format(
-        dt.tm_hour, dt.tm_min, dt.tm_sec))
+    uprint(" All done.  Elapsed CPU time: {:02d}h{:02d}m{:02d}s\n".format(
+            dt.tm_hour, dt.tm_min, dt.tm_sec))
 
 #----------------------------------------------------------------------#
 #                        command line arguments                        #
@@ -175,6 +195,11 @@ if (__name__ == "__main__"):
     parser.add_argument(
         "--bonds", "-b",
         help    = "Calculate fraction of percolating bonds",
+        action  = "store_true")
+
+    parser.add_argument(
+        "--flux", "-f",
+        help    = "Calculate percolation flux",
         action  = "store_true")
 
     parser.add_argument(
@@ -237,6 +262,7 @@ if (__name__ == "__main__"):
             pinf          = args.pinf,
             pwrap         = args.pwrap,
             bonds         = args.bonds,
+            flux          = args.flux,
             inaccessible  = args.inaccessible,
             supercell     = args.supercell,
             common        = args.common )
