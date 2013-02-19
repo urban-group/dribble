@@ -93,7 +93,7 @@ class Percolator(object):
         self._coo       = self._lattice._coo
         self._nsites    = self._lattice._nsites
         self._neighbors = self._lattice._nn
-        self._T_vectors = self._lattice._T_vectors
+        self._T_vectors = self._lattice._T_nn
         self._nsurface  = self._lattice._nsurface
         self._cluster   = self._lattice._occup
 
@@ -781,29 +781,6 @@ class Percolator(object):
     #------------------------------------------------------------------#
     #                         private methods                          #
     #------------------------------------------------------------------#
-
-    def _build_neighbor_list(self, dr=0.1):
-        """
-        Determine the list of neighboring sites for 
-        each site of the lattice.  Allow the next neighbor
-        distance to vary about `dr'.
-        """
-
-        dNN    = np.empty(self._nsites)
-        nbs    = range(self._nsites)
-        Tvecs  = range(self._nsites)
-
-        nblist = NeighborList(self._avec, self._coo)
-        
-        for i in xrange(self._nsites):
-            (nbl, dist, T) = nblist.get_nearest_neighbors(i, dr=dr)
-            nbs[i]   = nbl
-            Tvecs[i] = T
-            dNN[i]   = np.min(dist)
-
-        self._dNN       = dNN
-        self._neighbors = nbs
-        self._T_vectors = Tvecs
 
     def _count_surface_sites(self, dr=0.1):
         """

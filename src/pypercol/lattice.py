@@ -42,8 +42,9 @@ class Lattice(object):
                             and its j-th neighbor
         _nsurface           number of sites at cell boundary 
                             (computed, if needed)
-        _T_vectors[i][j]    the translation vector belonging to 
-                            _nn[i][j]
+        _T_nn[i][j]         the translation vector belonging to _nn[i][j]
+        _T_nnn[i][j]        the translation vector belonging to _nnn[i][j]
+                            (only computed upon request)
         _nbonds_tot         maximum number of possible bonds between the sites
         """
 
@@ -58,13 +59,13 @@ class Lattice(object):
                                          np.array(supercell, dtype=np.float64))
         self._coo = np.array(self._coo)
 
-        self._nsites    = len(self._coo)
-        self._occup     =  np.empty(self._nsites, dtype=int)
-        self._dNN       = []
-        self._nn        = []
-        self._nnn       = []
-        self._nsurface  = 0
-        self._T_vectors = []
+        self._nsites   = len(self._coo)
+        self._occup    =  np.empty(self._nsites, dtype=int)
+        self._dNN      = []
+        self._nn       = []
+        self._nnn      = []
+        self._nsurface = 0
+        self._T_nn     = []
 
         self._build_neighbor_list()
 
@@ -131,20 +132,36 @@ class Lattice(object):
         in `nnn'.
         """
         
-        nnn = []
-        with self._nblist.get_pbc_distances_and_translations as pbcdist:
-            for i in xrange(self._nsites):
-                nn_i = self._nn[i]
-                nnnb = set([])
-                for j in nn_i:
-                    nn_j = self._nn[j]
-                    nnnb |= set(nn_j) - set(nn_i)
-                    dmin = pbcdist(i,nnnb[0])
-                    for j in nnn[-1]:
-                
+        nnn   = []
+        T_nnn = []
 
+        pbcdist = self._nblist.get_pbc_distances_and_translations
+        for i in xrange(self._nsites):
+            nn_i = self._nn[i]
+            nnnb = set([])
+            for j in nn_i:
+                nn_j = self._nn[j]
+                nnnb |= set(nn_j) - set(nn_i) - {i}
+            nnnb = list(nnnb)
+            (dist, Tvecs) = pbcdist(i,nnnb[0])
+            dmin = dist[0]
+            nnn_i = []
+            T_nnn_i = []
+            for j in nnnb:
+                (dist, Tvec) = pbcdist(i,j)
+                for k in xrange(len(dist)):
+                    if (dist[k] < dmin - dr):
+                        nnn_i   = [j]
+                        T_nnn_i = [Tvec[k]]
+                        dmin    = dist[k]
+                    elif (dist[k] <= dmin + dr):
+                        nnn_i.append(j)
+                        T_nnn_i.append(Tvec[k])
+            nnn.append(nnn_i)
+            T_nnn.append(T_nnn_i)
 
-        self._nnn = nnn
+        self._nnn   = nnn
+        self._T_nnn = T_nnn
 
     #------------------------------------------------------------------#
     #                         private methods                          #
@@ -169,8 +186,8 @@ class Lattice(object):
             Tvecs[i] = T
             dNN[i]   = np.min(dist)
 
-        self._nblist    = nblist
-        self._dNN       = dNN
-        self._nn        = nbs
-        self._T_vectors = Tvecs
+        self._nblist = nblist
+        self._dNN    = dNN
+        self._nn     = nbs
+        self._T_nn   = Tvecs
         
