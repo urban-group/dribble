@@ -35,13 +35,15 @@ class Lattice(object):
         _nsites       total number of lattice sites
 
         _dNN[i]             nearest neighbor distance from the i-th site
-        _neighbors[i][j]    j-th neighbor site of site i
+        _nn[i][j]           j-th nearest neighbor site of site i
+        _nnn[i][j]          j-th next nearest neighbor site of site i
+                            (only computed upon request)
         _bonds[i][j]        True, if there is a bond between the j-th site 
                             and its j-th neighbor
         _nsurface           number of sites at cell boundary 
                             (computed, if needed)
         _T_vectors[i][j]    the translation vector belonging to 
-                            _neighbors[i][j]
+                            _nn[i][j]
         _nbonds_tot         maximum number of possible bonds between the sites
         """
 
@@ -59,7 +61,8 @@ class Lattice(object):
         self._nsites    = len(self._coo)
         self._occup     =  np.empty(self._nsites, dtype=int)
         self._dNN       = []
-        self._neighbors = []
+        self._nn        = []
+        self._nnn       = []
         self._nsurface  = 0
         self._T_vectors = []
 
@@ -86,21 +89,25 @@ class Lattice(object):
         return self.__str__()
 
     def __str__(self):
-        str  = "\n Instance of the Lattice class\n\n"
-        str += " Lattice vectors:\n\n"
+        ostr  = "\n Instance of the Lattice class\n\n"
+        ostr += " Lattice vectors:\n\n"
         for v in self._avec:
-            str += "   {:10.8f}  {:10.8f}  {:10.8f}\n".format(*v)
-        str += "\n number of sites: {}".format(self._nsites)
-        str += "\n"
-        return str
+            ostr += "   {:10.8f}  {:10.8f}  {:10.8f}\n".format(*v)
+        ostr += "\n number of sites: {}".format(self._nsites)
+        ostr += "\n"
+        return ostr
 
     #------------------------------------------------------------------#
     #                            properties                            #
     #------------------------------------------------------------------#
 
     @property
-    def neighbors(self):
-        return self._neighbors
+    def nn(self):
+        return self._nn
+
+    @property
+    def nnn(self):
+        return self._nnn
 
     @property
     def num_vacant(self):
@@ -114,8 +121,27 @@ class Lattice(object):
     def num_sites(self):
         return self._nsites
 
+    #------------------------------------------------------------------#
+    #                          public methods                          #
+    #------------------------------------------------------------------#
 
+    def get_nnn_shells(self):
+        """
+        Calculate shells of next nearest neighbors and store them 
+        in `nnn'.
+        """
+        
+        nnn = []
+        for i in xrange(self._nsites):
+            nn_i = self._nn[i]
+            nnn.append(set([]))
+            for j in nn_i:
+                nn_j = self._nn[j]
+                nnn[-1] |= set(nn_j) - set(nn_i)
+                
+            nnn[-1] = list(nnn[-1])
 
+        self._nnn = nnn
 
     #------------------------------------------------------------------#
     #                         private methods                          #
@@ -140,7 +166,7 @@ class Lattice(object):
             Tvecs[i] = T
             dNN[i]   = np.min(dist)
 
-        self._dNN       = dNN
-        self._neighbors = nbs
+        self._dNN  = dNN
+        self._nn   = nbs
         self._T_vectors = Tvecs
         

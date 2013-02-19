@@ -92,7 +92,7 @@ class Percolator(object):
         self._avec      = self._lattice._avec
         self._coo       = self._lattice._coo
         self._nsites    = self._lattice._nsites
-        self._neighbors = self._lattice._neighbors
+        self._neighbors = self._lattice._nn
         self._T_vectors = self._lattice._T_vectors
         self._nsurface  = self._lattice._nsurface
         self._cluster   = self._lattice._occup
@@ -193,8 +193,10 @@ class Percolator(object):
             self._bonds[i][:] = False
 
     def __str__(self):
-        str  = " "
-        return str
+        ostr  = "\n An instance of the Percolator class\n\n"
+        ostr += " Structure info:\n"
+        ostr += str(self._lattice)
+        return ostr
 
     def __repr__(self):
         return self.__str__()
