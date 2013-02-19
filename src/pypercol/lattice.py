@@ -125,21 +125,24 @@ class Lattice(object):
     #                          public methods                          #
     #------------------------------------------------------------------#
 
-    def get_nnn_shells(self):
+    def get_nnn_shells(self, dr=0.1):
         """
         Calculate shells of next nearest neighbors and store them 
         in `nnn'.
         """
         
         nnn = []
-        for i in xrange(self._nsites):
-            nn_i = self._nn[i]
-            nnn.append(set([]))
-            for j in nn_i:
-                nn_j = self._nn[j]
-                nnn[-1] |= set(nn_j) - set(nn_i)
+        with self._nblist.get_pbc_distances_and_translations as pbcdist:
+            for i in xrange(self._nsites):
+                nn_i = self._nn[i]
+                nnnb = set([])
+                for j in nn_i:
+                    nn_j = self._nn[j]
+                    nnnb |= set(nn_j) - set(nn_i)
+                    dmin = pbcdist(i,nnnb[0])
+                    for j in nnn[-1]:
                 
-            nnn[-1] = list(nnn[-1])
+
 
         self._nnn = nnn
 
@@ -166,7 +169,8 @@ class Lattice(object):
             Tvecs[i] = T
             dNN[i]   = np.min(dist)
 
-        self._dNN  = dNN
-        self._nn   = nbs
+        self._nblist    = nblist
+        self._dNN       = dNN
+        self._nn        = nbs
         self._T_vectors = Tvecs
         
