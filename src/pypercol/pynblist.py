@@ -338,18 +338,12 @@ class NeighborList(object):
         else:
             r2 = None
 
-        # T = (0,0,0) is not included in self._T_latt
         vec_ij = self._coo[j] - coo_i
-        cart   = np.dot(vec_ij, self._avec)
-        d2     = np.sum(cart*cart)
-        if r2:
-            if (d2 - EPS < r2):
-                dist.append(np.sqrt(d2))
-                Tvecs.append((0,0,0))
-        else:
+        if not r2:
+            # use values for T = (0,0,0) for comparison
+            cart   = np.dot(vec_ij, self._avec)
+            d2     = np.sum(cart*cart)
             d2_min = d2
-            dist.append(np.sqrt(d2))
-            Tvecs.append((0,0,0))
 
         # now other T vectors
         for T in self._T_latt:
