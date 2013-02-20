@@ -104,11 +104,13 @@ class Lattice(object):
 
     @property
     def nn(self):
-        return self._nn
+        out = self._nn[:]
+        return out
 
     @property
     def nnn(self):
-        return self._nnn
+        out = self._nnn[:]
+        return out
 
     @property
     def num_vacant(self):
