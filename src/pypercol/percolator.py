@@ -34,7 +34,6 @@ from scipy.stats import binom
 from aux         import uprint
 from aux         import ProgressBar
 from lattice     import Lattice
-from pynblist    import NeighborList
 
 EPS   = 100.0*np.finfo(np.float).eps
 
@@ -96,6 +95,8 @@ class Percolator(object):
         self._T_vectors = self._lattice._T_nn
         self._nsurface  = self._lattice._nsurface
         self._cluster   = self._lattice._occup
+        self._occupied  = self._lattice._occupied
+        self._vacant    = self._lattice._vacant
 
         self._special   = False
 
