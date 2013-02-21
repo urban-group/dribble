@@ -39,6 +39,10 @@ class IsingModel(object):
         # total energy
         self._E_tot = self.total_energy()
 
+        self.niter = 0
+        self.nacc  = 0
+        self.nrej  = 0
+
     def __str__(self):
         ostr  = " \nAn instance of the Ising class\n\n"
         return ostr
@@ -82,6 +86,8 @@ class IsingModel(object):
         Perform a single MC step at temperature T.
         """
 
+        self.niter += 1
+
         idx_i = np.random.random_integers(0,len(self._occupied)-1)
         idx_j = np.random.random_integers(0,len(self._vacant)-1)
 
@@ -108,7 +114,10 @@ class IsingModel(object):
             r = np.random.random()
             if (r <= tau*np.exp(-kT_inv*dE)):
                 accept = True
-                print(1)
+                self.nacc += 1
+            else:
+                self.nrej += 1
+
 
         if accept:
             self._E_tot += dE
@@ -131,14 +140,9 @@ if __name__=="__main__": #{{{ unit test
 
     from lattice import Lattice
     
-    print("\n FCC 4x4x4 cell (64 sites)\n")
-#
-#    avec = np.array([ [0.0, 0.5, 0.5],
-#                      [0.5, 0.0, 0.5],
-#                      [0.5, 0.5, 0.0] ])*5.0
-#
-#    coo = np.array([[0.0, 0.0, 0.0]])
+    print("\n FCC, 50% occupied,  J1 = J2\n")
 
+    # starting from ground state (layered)
     avec = np.array([ [0.000000,  1.859700,  1.859700],
                       [1.859700, -1.859700,  0.000000],
                       [3.719400,  1.859700, -1.859700] ])
@@ -148,20 +152,29 @@ if __name__=="__main__": #{{{ unit test
 
     lat = Lattice(avec, coo, supercell=(4,4,4))
     lat.get_nnn_shells()
-    lat.random_decoration(p=0.5)
+
+    lat._occup[0:64]   =  1
+    lat._occup[64:128] = -1
+    lat._occupied      = range(0,64)
+    lat._vacant        = range(64,128)
 
     lat.save_structure('CONTCAR.0')
 
     print(" number of occupied sites: {}\n".format(lat.num_occupied))
 
-    J1 = 1.0
-    J2 = 1.0
+    J1 = -1.0
+    J2 = -1.0
 
     T = 800000.0
     kT_inv = 1.0/(T*k_B)
     tau = 1.0
     NMC = 10000
 
+    ising = IsingModel(lat, J1, J2, H=0.0)
+    E0 = ising.total_energy()
+
+    # re-initialize with random decoration:
+    lat.random_decoration(p=0.5)
     ising = IsingModel(lat, J1, J2, H=0.0)
 
     print(" Running MC simulation ({} steps)".format(NMC))
@@ -175,8 +188,11 @@ if __name__=="__main__": #{{{ unit test
     print(" final energy = {}".format(E))
     E_tot = ising.total_energy()
     print(" total energy = {} (calculated from scratch)".format(E_tot))
+    print(" ground state = {} (layered)".format(E0))
     if (abs(E-E_tot)>0.1):
-        print(" Error: energies inconsistent\n")
+        print("\n Error: energies inconsistent!")
+
+    print(" accepted/rejected: {}".format(float(ising.nacc)/float(ising.nrej)))
 
     print("\n number of occupied sites: {}".format(lat.num_occupied))
 
