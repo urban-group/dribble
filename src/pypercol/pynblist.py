@@ -69,7 +69,7 @@ class NeighborList(object):
         self._T_box = []
         for T in T_box:
             bid = self._box_ID(*T)
-            if not (bid in self._T_box):
+            if (not (bid in self._T_box)) and (bid != 0):
                 self._T_box.append(bid)
         self._T_box = np.array(self._T_box, dtype=int)
 
@@ -198,8 +198,18 @@ class NeighborList(object):
         coo_i_T = -self._T_latt + coo_i
         coo_i_T = np.dot(coo_i_T, self._avec)
 
-        possible = self.get_possible_neighbors(i)
+        # periodic images of i
+        coo_j = np.dot(self._coo[i], self._avec)
+        v_ij = coo_i_T - coo_j
+        d2 = np.sum(v_ij*v_ij, axis=1)
+        idx = (d2 <= r2) * (d2 > EPS) # filter out the atom itself
+        if np.any(idx):
+            dist  += list(np.sqrt(d2[idx]))
+            Tvecs += list(self._T_latt[idx])
+            nbl   += len(d2[idx])*[i]
 
+        # further possible neighbors
+        possible = self.get_possible_neighbors(i)
         for j in possible:
             coo_j = np.dot(self._coo[j], self._avec)
             v_ij = coo_i_T - coo_j
@@ -241,10 +251,25 @@ class NeighborList(object):
         coo_i_T = -self._T_latt + coo_i
         coo_i_T = np.dot(coo_i_T, self._avec)
 
-        possible = self.get_possible_neighbors(i)
 
         d_min_min = np.linalg.norm(np.dot((1.0,1.0,1.0),self._avec))
 
+        # periodic images of i
+        coo_j = np.dot(self._coo[i], self._avec)
+        v_ij = coo_i_T - coo_j
+        d2 = np.sum(v_ij*v_ij, axis=1)
+        idx = d2 > EPS
+        d_min = np.sqrt(np.min(d2[idx]))
+        d_min_min = min(d_min, d_min_min)
+        if (d_min <= d_min_min + dr):
+            idx = (d2 <= (d_min_min+dr)**2) * (d2 > EPS)
+            if np.any(idx):
+                dist  += list(np.sqrt(d2[idx]))
+                Tvecs += list(self._T_latt[idx])
+                nbl   += len(d2[idx])*[i]
+
+        # further possible neighbors
+        possible = self.get_possible_neighbors(i)
         for j in possible:
             coo_j = np.dot(self._coo[j], self._avec)
             v_ij = coo_i_T - coo_j
@@ -455,10 +480,10 @@ class NeighborList(object):
 
                         for T in common:
                             T_new = tuple(np.add((ix,iy,iz), T))
-                            if not (T_new in star):
+                            if (not (T_new in star)) and (not np.all(T_new == (0,0,0))):
                                 star.append(T_new)
                             T_new = tuple(np.add((-ix,-iy,-iz), T))
-                            if not (T_new in star):
+                            if (not (T_new in star)) and (not np.all(T_new == (0,0,0))):
                                 star.append(T_new)
                         found_one_y = True
                     else:
