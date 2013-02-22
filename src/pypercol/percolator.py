@@ -109,7 +109,9 @@ class Percolator(object):
             self._bonds.append(np.array(nbs*[False]))
         self._nbonds_tot /= 2
 
-        self.reset()
+        self.reset(init=True)
+
+        sys.setrecursionlimit(50000)
 
     @classmethod
     def from_structure(cls, structure, **kwargs):
@@ -145,7 +147,7 @@ class Percolator(object):
 
         return percol
 
-    def reset(self):
+    def reset(self, init=False):
         """
         Reset the instance to the state of initialization.
         """
@@ -173,7 +175,6 @@ class Percolator(object):
 
         """
 
-        self._cluster[:]   = -1
         self._nclusters    = 0
         self._nbonds       = 0
         self._npercolating = 0
@@ -187,8 +188,10 @@ class Percolator(object):
         self._next[:]      = -1
         self._vec          = np.zeros(self._coo.shape)
 
-        self._occupied     = []
-        self._vacant       = range(self._nsites)
+        if not init:
+            self._cluster[:]   = -1
+            self._occupied     = []
+            self._vacant       = range(self._nsites)
 
         for i in range(self._nsites):
             self._bonds[i][:] = False
@@ -246,16 +249,17 @@ class Percolator(object):
             return visited
 
         nspanning = np.array([0,0,0], dtype=int)
-        newsites  = []
+        newsites  = [site]
 
-        for nb in self._neighbors[site]:
+        for i in xrange(len(self._neighbors[site])):
+            nb = self._neighbors[site][i]
             # neighboring site occupied and bound?
             if ((self._cluster[nb] >= 0) and self._check_special(site,nb)):
                 # vector to origin
-                T = self._T_vectors[site][nb]
+                T = self._T_vectors[site][i]
                 v_12 = (self._coo[nb] + T) - self._coo[site]
                 vec_nb = vec + v_12
-                if not (nb in visited):
+                if not (nb in visited+newsites):
                     self._vec[nb] = vec_nb
                     (subcluster, subspan
                     ) = self.get_cluster_of_site(nb, vec_nb, visited+newsites)
@@ -288,6 +292,23 @@ class Percolator(object):
                 visited += self.get_cluster_of_site(nb, visited)[len(visited):]
 
         return visited
+
+    def check_spanning(self):
+        """
+        Check, how many (if any) spanning clusters are present.
+        """
+
+        visited = []
+        nspanning = 0
+
+        for i in xrange(self._nsites):
+            if (self._cluster[i] > 0) and not (i in visited):
+                (cluster, spanning) = self.get_cluster_of_site(i)
+                visited += cluster
+                if np.sum(spanning) > 0:
+                    nspanning += len(cluster)
+                
+        return float(nspanning)/float(self.num_occupied)
 
 
     def get_common_neighbors(self, site1, site2):

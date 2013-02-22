@@ -17,12 +17,16 @@ from pynblist    import NeighborList
 
 class Lattice(object):
 
-    def __init__(self, lattice_vectors, frac_coords, supercell=(1,1,1)):
+    def __init__(self, lattice_vectors, frac_coords, decoration=None, 
+                 supercell=(1,1,1)):
         """
         Arguments:
           lattice_vectors    3x3 matrix with lattice vectors in rows
           frac_coords        Nx3 array; fractional coordinates of the 
                              N lattice sites
+          decoration[i]      initial occupation O of site i (corresponding to
+                             frac_coords[i]); 
+                             O > 0 --> occupied; O < 0 --> vacant
           supercell          list of multiples of the cell in the three 
                              spacial directions
         """
@@ -47,19 +51,35 @@ class Lattice(object):
                             (only computed, if requested)
         """
 
-        self._avec   = (np.array(lattice_vectors).T * supercell).T
-        self._coo    = []
+        self._avec     = (np.array(lattice_vectors).T * supercell).T
+        self._coo      = []
+        self._occup    = []
+        self._occupied = []
+        self._vacant   = []
+
+        isite = 0
         for i in range(len(frac_coords)):
             coo = np.array(frac_coords[i])
+            if np.any(decoration):
+                Oi = decoration[i]
+            else:
+                Oi = -1
             for ix in xrange(supercell[0]):
                 for iy in xrange(supercell[1]):
                     for iz in xrange(supercell[2]):
                         self._coo.append((coo + [ix, iy, iz])/
                                          np.array(supercell, dtype=np.float64))
-        self._coo = np.array(self._coo)
+                        self._occup.append(Oi)
+                        if (Oi > 0):
+                            self._occupied.append(isite)
+                        else:
+                            self._vacant.append(isite)
+                        isite += 1
 
-        self._nsites   = len(self._coo)
-        self._occup    = np.empty(self._nsites, dtype=int)
+        self._coo    = np.array(self._coo)
+        self._nsites = len(self._coo)
+        self._occup  = np.array(self._occup)
+
         self._dNN      = []
         self._nn       = []
         self._nnn      = []
@@ -67,37 +87,44 @@ class Lattice(object):
         self._T_nnn    = []
         self._nsurface = 0
 
-        self._occupied = []
-        self._vacant   = range(self._nsites)
-
         self._build_neighbor_list()
 
     @classmethod
-    def from_structure(cls, structure, **kwargs):
+    def from_structure(cls, structure, species="O", **kwargs):
         """
-        Create a Percolator instance based on the lattice vectors
-        defined in a `structure' object.
+        Create a Lattice instance based on the lattice vectors
+        defined in a `structure' object (pymatgen.core.structure).
 
         Arguments:
+
           structure       an instance of pymatgen.core.structure.Structure
-          all keyword arguments of the main constructor
+          species         the species that marks occupied lattice sites
+                          all other species will be converted to vacant sites
+
+          All keyword arguments of the main constructor are supported, 
+          except the initial 'decoration', which is deduced from
+          the structure.
         """
     
-        avec   = structure.lattice.matrix
-        coo    = structure.frac_coords
-        percol = cls(avec, coo, **kwargs)
+        avec    = structure.lattice.matrix
+        coo     = structure.frac_coords
+        symbol  = np.array([s.symbol for s in structure.species])
+        decorat = np.where(symbol==species, 1, -1)
 
-        return percol
+        lattice = cls(avec, coo, decoration=decorat, **kwargs)
+
+        return lattice
 
     def __repr__(self):
         return self.__str__()
 
     def __str__(self):
-        ostr  = "\n Instance of the Lattice class\n\n"
+        ostr  = "\n Instance of the Lattice class:\n\n"
         ostr += " Lattice vectors:\n\n"
         for v in self._avec:
             ostr += "   {:12.8f}  {:12.8f}  {:12.8f}\n".format(*v)
-        ostr += "\n number of sites: {}".format(self._nsites)
+        ostr += "\n total number of sites: {}".format(self._nsites)
+        ostr += "\n occupied sites       : {}".format(self.num_occupied)
         ostr += "\n"
         return ostr
 
