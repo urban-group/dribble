@@ -71,8 +71,8 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=1000,
         pb()
 
         if (NMC > 0):
-            uprint(" now sampling every " + 
-                   "{}th structure for {} MC steps".format(Nevery,NMC))
+            uprint(" now sampling {} structures ".format(Nstruc)
+                   + "out of {} MC steps".format(NMC))
             
             nsamp = 0
             nspan = 0.0
@@ -86,13 +86,13 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=1000,
                     nspan += percol.check_spanning()
             pb()
             
+            uprint(" percolation probability: {}".format(
+                float(nspan)/float(nsamp)))
+
             E_tot = ising.total_energy()
             if (abs(E-E_tot)>1.0e-6):
                 uprint("Error: final energy inconsistent - check MC code!")
                 
-            uprint(" percolation probability: {}".format(
-                float(nspan)/float(nsamp)))
-
     uprint(" Saving final structure to file 'CONTCAR'.")
     lattice.save_structure('CONTCAR')
 

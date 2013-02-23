@@ -90,7 +90,20 @@ class NeighborList(object):
         return nbl
 
     def __str__(self):
-        return
+        ostr  = "\n Instance of the NeighborList class\n\n"
+        if self._range:
+            ostr += " interaction range          : {}\n".format(self._range)
+        else:
+            ostr += " interaction range          : NNs only\n"
+        ostr += " boxes per lattice direction:"
+        ostr += " {} {} {}\n".format(*self._nboxes)
+        ostr += " total number of atoms      : {}\n".format(self.num_coords)
+        ostr += " av. number of atoms per box: {}\n".format(
+            float(self.num_coords)/float(self._nboxes_tot))
+        return ostr
+
+    def __repr__(self):
+        return self.__str__()
 
     #--------------------------- properties ---------------------------#
 

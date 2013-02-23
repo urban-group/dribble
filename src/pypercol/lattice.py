@@ -126,6 +126,7 @@ class Lattice(object):
         ostr += "\n total number of sites: {}".format(self._nsites)
         ostr += "\n occupied sites       : {}".format(self.num_occupied)
         ostr += "\n"
+        ostr += str(self._nblist)
         return ostr
 
     #------------------------------------------------------------------#

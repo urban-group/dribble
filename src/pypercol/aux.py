@@ -64,6 +64,7 @@ class ProgressBar(object):
 
         if self._count == self._steps:
             uprint(" done.\n")
+            return
 
         if self._count > self._steps:
             return

@@ -97,47 +97,50 @@ class IsingModel(object):
 
         self.niter += 1
 
-        idx_i = np.random.random_integers(0,len(self._occupied)-1)
-        idx_j = np.random.random_integers(0,len(self._vacant)-1)
+        noccupied = len(self._occupied)
+        nvacant   = self._nsites - noccupied
 
-        i = self._occupied[idx_i]
-        j = self._vacant[idx_j]
+        for istep in xrange(noccupied):
 
-        # affected sited
-        sites  = [i,j] + self._nn[i] + self._nn[j] 
-        sites += self._nnn[i] + self._nnn[j]
-        sites = set(sites)
-
-        dE = 0.0
-        for k in sites:
-            dE -= self.E(k)
-        self._occup[i] = -1
-        self._occup[j] =  1
-        for k in sites:
-            dE += self.E(k)
-
-        accept = False
-        if (dE <= 0):
-            accept = True
-        else:
-            r = np.random.random()
-            if (r <= tau*np.exp(-kT_inv*dE)):
-                accept = True
-                self.nacc += 1
-            else:
-                self.nrej += 1
-
-
-        if accept:
-            self._E_tot += dE
-            del self._occupied[idx_i]
-            del self._vacant[idx_j]
-            self._occupied.append(j)
-            self._vacant.append(i)
-        else:
-            self._occup[i] =  1
-            self._occup[j] = -1
+            idx_i = np.random.random_integers(0,noccupied-1)
+            idx_j = np.random.random_integers(0,nvacant-1)
             
+            i = self._occupied[idx_i]
+            j = self._vacant[idx_j]
+            
+            # affected sited
+            sites  = [i,j] + self._nn[i] + self._nn[j] 
+            sites += self._nnn[i] + self._nnn[j]
+            sites = set(sites)
+            
+            dE = 0.0
+            for k in sites:
+                dE -= self.E(k)
+            self._occup[i] = -1
+            self._occup[j] =  1
+            for k in sites:
+                dE += self.E(k)
+            
+            accept = False
+            if (dE <= 0):
+                accept = True
+            else:
+                r = np.random.random()
+                if (r <= tau*np.exp(-kT_inv*dE)):
+                    accept = True
+                    self.nacc += 1
+                else:
+                    self.nrej += 1
+            
+            if accept:
+                self._E_tot += dE
+                del self._occupied[idx_i]
+                del self._vacant[idx_j]
+                self._occupied.append(j)
+                self._vacant.append(i)
+            else:
+                self._occup[i] =  1
+                self._occup[j] = -1
 
         return self._E_tot
 
@@ -150,48 +153,50 @@ class IsingModel(object):
 
         self.niter += 1
 
-        i = np.random.random_integers(0,self._nsites-1)
+        for istep in xrange(self._nsites):
 
-        if self._occup[i] > 0:
-            idx_i = self._occupied.index(i)
-        else:
-            idx_i = self._vacant.index(i)
-
-        # affected sited
-        sites  = [i] + self._nn[i] + self._nnn[i] 
-        sites = set(sites)
-
-        dE = 0.0
-        for k in sites:
-            dE -= self.E(k)
-        self._occup[i] = -np.sign(self._occup[i])
-        for k in sites:
-            dE += self.E(k)
-
-        accept = False
-        if (dE <= 0):
-            accept = True
-        else:
-            r = np.random.random()
-            if (r <= tau*np.exp(-kT_inv*dE)):
-                accept = True
-                self.nacc += 1
-            else:
-                self.nrej += 1
-
-        if accept:
-            self._E_tot += dE
-            if self._occup[i] < 0: # then it was > 0 before flip
+            i = np.random.random_integers(0,self._nsites-1)
+            
+            if self._occup[i] > 0:
                 idx_i = self._occupied.index(i)
-                del self._occupied[idx_i]
-                self._vacant.append(i)
             else:
                 idx_i = self._vacant.index(i)
-                del self._vacant[idx_i]
-                self._occupied.append(i)
-        else:
-            # flip back
+            
+            # affected sited
+            sites  = [i] + self._nn[i] + self._nnn[i] 
+            sites = set(sites)
+            
+            dE = 0.0
+            for k in sites:
+                dE -= self.E(k)
             self._occup[i] = -np.sign(self._occup[i])
+            for k in sites:
+                dE += self.E(k)
+            
+            accept = False
+            if (dE <= 0):
+                accept = True
+            else:
+                r = np.random.random()
+                if (r <= tau*np.exp(-kT_inv*dE)):
+                    accept = True
+                    self.nacc += 1
+                else:
+                    self.nrej += 1
+            
+            if accept:
+                self._E_tot += dE
+                if self._occup[i] < 0: # then it was > 0 before flip
+                    idx_i = self._occupied.index(i)
+                    del self._occupied[idx_i]
+                    self._vacant.append(i)
+                else:
+                    idx_i = self._vacant.index(i)
+                    del self._vacant[idx_i]
+                    self._occupied.append(i)
+            else:
+                # flip back
+                self._occup[i] = -np.sign(self._occup[i])
 
         return self._E_tot
 
