@@ -23,7 +23,8 @@ from pypercol.aux       import uprint
 #----------------------------------------------------------------------#
 
 def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=1000, 
-          NMC=5000, Nstruc=100, supercell=(1,1,1), common=None, conc=None):
+          NMC=5000, Nstruc=100, supercell=(1,1,1), common=None, 
+          conc=None, opt=False):
 
     outfile = "mcpercol.out"
 
@@ -42,12 +43,13 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=1000,
         uprint(" Initial site occupations taken from structure file.")
     uprint(lattice)
 
-    uprint(" Initializing percolator...", end="")
-    percol = Percolator(lattice)
-    uprint(" done.")
-    if common > 0:
-        uprint(" Using percolation rule with {} common neighbor(s).".format(common))
-        percol.set_special_percolation_rule(num_common=common)
+    if not opt:
+        uprint(" Initializing percolator...", end="")
+        percol = Percolator(lattice)
+        uprint(" done.")
+        if common > 0:
+            uprint(" Using percolation rule with {} common neighbor(s).".format(common))
+            percol.set_special_percolation_rule(num_common=common)
 
     uprint("\n Initializing Ising model...", end="")
     ising = IsingModel(lattice, v1, v2, H=H)
@@ -58,6 +60,11 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=1000,
     kT_inv = 1.0/(k_B*T)
 
     Nevery = int(round(float(NMC)/float(Nstruc)))
+
+    if opt:
+        Nequi = NMC
+        Tfinal = 600.0
+        Tramp = (Tfinal - T)/NMC
 
     with open(outfile, 'w') as f:
 
@@ -160,6 +167,11 @@ if (__name__ == "__main__"):
         dest    = "H")
 
     parser.add_argument(
+        "--opt", 
+        help    = "Only optimize structure (search ground state).",
+        action  = "store_true")
+
+    parser.add_argument(
         "--N-equi",
         help    = "Number of MC steps for equilibration.",
         type    = int,
@@ -192,4 +204,5 @@ if (__name__ == "__main__"):
            Nstruc    = args.N_samp,
            supercell = args.supercell,
            common    = args.common,
-           conc      = args.conc)
+           conc      = args.conc,
+           opt       = args.opt)
