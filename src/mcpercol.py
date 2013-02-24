@@ -22,8 +22,8 @@ from pypercol.aux       import uprint
 
 #----------------------------------------------------------------------#
 
-def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=1000, 
-          NMC=5000, Nstruc=100, supercell=(1,1,1), common=None, 
+def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=100, 
+          NMC=500, Nstruc=250, supercell=(1,1,1), common=None, 
           conc=None, opt=False):
 
     outfile = "mcpercol.out"
@@ -63,19 +63,40 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=1000,
 
     if opt:
         Nequi = NMC
+        NMC = 0
         Tfinal = 600.0
-        Tramp = (Tfinal - T)/NMC
+        Tramp = (Tfinal - T)/(Nequi-1)
+        Nconst_max = 50
+        Nconst = 0
+        E_prev = 0.0
 
-    with open(outfile, 'w') as f:
+    with open(outfile, 'w', 0) as f:
 
-        uprint(" equilibrating for {} MC steps at T = {}".format(Nequi,T))
+        if opt:
+            uprint(" annealing for {} MC steps from T = {} to {}".format(Nequi,T,Tfinal))
+        else:
+            uprint(" equilibrating for {} MC steps at T = {}".format(Nequi,T))
 
+        conv = False
         pb = ProgressBar(Nequi)
         for i in xrange(Nequi):
             pb()
             E = ising.mc_NVT(kT_inv=kT_inv, tau=tau)
-            f.write("{} {}\n".format(i, E))
-        pb()
+            f.write("{} {} {}\n".format(i, E, T))
+            if opt and (i < Nequi-1):
+                T += Tramp
+                kT_inv = 1.0/(k_B*T)
+                if (E == E_prev):
+                    Nconst += 1
+                    if (Nconst >= Nconst_max):
+                        uprint(" Converged after {} MC steps.\n".format(i))
+                        conv = True
+                        break
+                else:
+                    E_prev = E
+                    Nconst = 0
+        if not conv:
+            pb()
 
         if (NMC > 0):
             uprint(" now sampling {} structures ".format(Nstruc)
@@ -96,9 +117,15 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=1000,
             uprint(" percolation probability: {}".format(
                 float(nspan)/float(nsamp)))
 
-            E_tot = ising.total_energy()
-            if (abs(E-E_tot)>1.0e-6):
-                uprint("Error: final energy inconsistent - check MC code!")
+        E_tot = ising.total_energy()
+        if (abs(E-E_tot)>1.0e-6):
+            uprint("Error: final energy inconsistent - check MC code!")
+        
+        uprint("  E_tot         T             V1            "
+               + "V2            H             V1/kT         p")
+        uprint(" {:.6e}  {:.6e}  {:.6e}  {:.6e}  {:.6e}  {:.6e}  {:.6f}\n".format(
+            E_tot, T, v1, v2, H, v1*kT_inv, 
+            float(lattice.num_occupied)/float(lattice.num_sites)))
                 
     uprint(" Saving final structure to file 'CONTCAR'.")
     lattice.save_structure('CONTCAR')
@@ -151,13 +178,13 @@ if (__name__ == "__main__"):
         "--V1", 
         help    = "Nearest neighbor interaction.",
         type    = float,
-        default = 0.5e-3)
+        default = 0.3e-2)
 
     parser.add_argument(
         "--V2", 
         help    = "Next nearest neighbor interaction.",
         type    = float,
-        default = 0.5e-3)
+        default = 0.3e-2)
 
     parser.add_argument(
         "-H", "--magnetfield", 
@@ -175,21 +202,21 @@ if (__name__ == "__main__"):
         "--N-equi",
         help    = "Number of MC steps for equilibration.",
         type    = int,
-        default = 1000,
+        default = 100,
         dest    = "N_equi")
 
     parser.add_argument(
         "--N-MC",
         help    = "Number of MC steps for the sampling (after equilibration).",
         type    = int,
-        default = 5000,
+        default = 500,
         dest    = "N_MC")
 
     parser.add_argument(
         "--N-samp",
         help    = "Number of structures to sample for percolation properties.",
         type    = int,
-        default = 100,
+        default = 250,
         dest    = "N_samp")
 
     args = parser.parse_args()
