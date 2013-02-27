@@ -100,7 +100,7 @@ class IsingModel(object):
         noccupied = len(self._occupied)
         nvacant   = self._nsites - noccupied
 
-        for istep in xrange(noccupied):
+        for istep in xrange(self._nsites):
 
             idx_i = np.random.random_integers(0,noccupied-1)
             idx_j = np.random.random_integers(0,nvacant-1)

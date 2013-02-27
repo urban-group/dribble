@@ -24,7 +24,7 @@ from pypercol.aux       import uprint
 
 def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=100, 
           NMC=500, Nstruc=250, supercell=(1,1,1), common=None, 
-          conc=None, opt=False):
+          conc=None, nocc=None, opt=False, mVT=False):
 
     outfile = "mcpercol.out"
 
@@ -39,6 +39,9 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=100,
     if conc:
         uprint(" Random site occupations. p = {}".format(conc))
         lattice.random_decoration(p=conc)
+    elif nocc:
+        uprint(" Random site occupations. N = {}".format(nocc))
+        lattice.random_decoration(N=nocc)       
     else:
         uprint(" Initial site occupations taken from structure file.")
     uprint(lattice)
@@ -66,7 +69,7 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=100,
         NMC = 0
         Tfinal = 600.0
         Tramp = (Tfinal - T)/(Nequi-1)
-        Nconst_max = 50
+        Nconst_max = 30
         Nconst = 0
         E_prev = 0.0
 
@@ -74,21 +77,31 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=100,
 
         if opt:
             uprint(" annealing for {} MC steps from T = {} to {}".format(Nequi,T,Tfinal))
+            E_low = ising.total_energy()
         else:
             uprint(" equilibrating for {} MC steps at T = {}".format(Nequi,T))
+
+        if mVT:
+            uprint(" simulating a micro-canonical ensemble (muVT)\n")
+        else:
+            uprint(" simulating a canonical ensemble (NVT)\n")
 
         conv = False
         pb = ProgressBar(Nequi)
         for i in xrange(Nequi):
             pb()
-            E = ising.mc_NVT(kT_inv=kT_inv, tau=tau)
+            if mVT:
+                E = ising.mc_mVT(kT_inv=kT_inv, tau=tau)
+            else:
+                E = ising.mc_NVT(kT_inv=kT_inv, tau=tau)
             f.write("{} {} {}\n".format(i, E, T))
             if opt and (i < Nequi-1):
                 T += Tramp
                 kT_inv = 1.0/(k_B*T)
+                E_low = min(E, E_low)
                 if (E == E_prev):
                     Nconst += 1
-                    if (Nconst >= Nconst_max):
+                    if (Nconst >= Nconst_max) and (E == E_low):
                         uprint(" Converged after {} MC steps.\n".format(i))
                         conv = True
                         break
@@ -97,6 +110,8 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=100,
                     Nconst = 0
         if not conv:
             pb()
+            if opt and (E != E_low):
+                uprint(" Warning: final state is not the minimal energy state !")
 
         if (NMC > 0):
             uprint(" now sampling {} structures ".format(Nstruc)
@@ -107,7 +122,10 @@ def runmc(infile, T=300.0, v1=0.5e-3, v2=0.5e-3, H=0.0, Nequi=100,
             pb = ProgressBar(NMC)
             for i in xrange(Nequi,NMC+Nequi):
                 pb()
-                E = ising.mc_NVT(kT_inv=kT_inv, tau=tau)
+                if mVT:
+                    E = ising.mc_mVT(kT_inv=kT_inv, tau=tau)
+                else:
+                    E = ising.mc_NVT(kT_inv=kT_inv, tau=tau)
                 f.write("{} {}\n".format(i, E))
                 if (i % Nevery == 0):
                     nsamp += 1
@@ -160,6 +178,13 @@ if (__name__ == "__main__"):
         dest    = "conc")
 
     parser.add_argument(
+        "-n", "--num-occupied",
+        help    = "Exact number of occupied sites.",
+        type    = int,
+        default = None,
+        dest    = "nocc")
+
+    parser.add_argument(
         "--supercell",
         help    = "List of multiples of the lattice cell" +
                   " in the three spacial directions",
@@ -199,6 +224,11 @@ if (__name__ == "__main__"):
         action  = "store_true")
 
     parser.add_argument(
+        "--mVT", 
+        help    = "Micro-canonical ensemble (variable particle number).",
+        action  = "store_true")
+
+    parser.add_argument(
         "--N-equi",
         help    = "Number of MC steps for equilibration.",
         type    = int,
@@ -209,7 +239,7 @@ if (__name__ == "__main__"):
         "--N-MC",
         help    = "Number of MC steps for the sampling (after equilibration).",
         type    = int,
-        default = 500,
+        default = 250,
         dest    = "N_MC")
 
     parser.add_argument(
@@ -232,4 +262,6 @@ if (__name__ == "__main__"):
            supercell = args.supercell,
            common    = args.common,
            conc      = args.conc,
-           opt       = args.opt)
+           nocc      = args.nocc,
+           opt       = args.opt,
+           mVT       = args.mVT)
