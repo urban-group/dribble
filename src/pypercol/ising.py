@@ -17,13 +17,19 @@ k_B = 3.1668157e-06  # Ha/K
 
 class IsingModel(object):
 
-    def __init__(self, lattice, J1, J2, H=1.0):
+    def __init__(self, lattice, J1, J2, H=0.0):
+
+        # compute next nearest neighbor shells, if not already done
+        if (len(lattice._nnn) == 0):
+            lattice.get_nnn_shells()
 
         # keep references to lattice
         self._lattice  = lattice
         self._nsites   = lattice._nsites
         self._nn       = lattice._nn
         self._nnn      = lattice._nnn
+        self._N_nn     = lattice._N_nn
+        self._N_nnn    = lattice._N_nnn
         self._occup    = lattice._occup
         self._occupied = lattice._occupied
         self._vacant   = lattice._vacant
@@ -34,8 +40,14 @@ class IsingModel(object):
         self._H    = H
 
         # translation to lattice gas Hamiltonian speech
-        self._v1 =  4.0*J1
-        self._v2 =  4.0*J2
+        self._v1 =   4.0*J1
+        self._v2 =   4.0*J2
+        if (type(self._N_nn) == type(self._N_nnn) == int):
+            self._mu =  -2.0*(H + float(self._N_nn)*J1 + float(self._N_nnn)*J2)
+        else:
+            print("Warning: conversion to lattice gas Hamiltonian only")
+            print("         for regular lattices implemented!")
+            self._mu = 0.0
         
         # total energy
         self._E_tot = self.total_energy()
@@ -43,6 +55,26 @@ class IsingModel(object):
         self.niter = 0
         self.nacc  = 0
         self.nrej  = 0
+
+    @classmethod
+    def from_lattice_gas_H(cls, lattice, v1, v2, mu=0.0):
+
+        # compute next nearest neighbor shells, if not already done
+        if (len(lattice._nnn) == 0):
+            lattice.get_nnn_shells()
+
+        J1 = 0.25*v1
+        J2 = 0.25*v2
+
+        if (type(lattice._N_nn) == type(lattice._N_nnn) == int):
+            H = -0.5*mu - float(lattice._N_nn)*J1 - float(lattice._N_nnn)*J2
+        else:
+            print("\nError: conversion from lattice gas Hamiltonian to Ising")
+            print("       model only implemented for regular lattices!\n")
+            sys.exit()
+        
+        ising = cls(lattice, J1, J2, H=H)
+        return ising
 
     def __str__(self):
         ostr  = "\n Instance of the Ising class:\n\n"
@@ -74,7 +106,7 @@ class IsingModel(object):
         for j in self._nnn[i]:
             E_nnn += np.sign(self._occup[j])
         s_i = np.sign(self._occup[i])
-        E = s_i*(self._J1_2*E_nn + self._J2_2*E_nnn + self._H)
+        E = s_i*(self._J1_2*E_nn + self._J2_2*E_nnn - self._H)
 
         return E 
 

@@ -13,33 +13,56 @@ except ImportError:
     sys.exit()
 
 from pypercol     import Percolator
+from pypercol     import Lattice
 from pypercol.aux import uprint
 
 #----------------------------------------------------------------------#
 
 def percol(poscarfile, samples, save_clusters=False, 
-           file_name="percol.out", pc=False, pinf=False, pwrap=False, 
-           bonds=False, flux=False, inaccessible=False, 
-           supercell=[1,1,1], common=0):
+           file_name="percol.out", pc=False, check=False, pinf=False, 
+           pwrap=False, bonds=False, flux=False, inaccessible=False, 
+           supercell=[1,1,1], common=0, same=None):
 
-    if not (pc or pinf or pwrap or bonds or flux or inaccessible):
+    if not (check or pc or pinf or pwrap or bonds or flux or inaccessible):
         print("\n Nothing to do.")
         print(" Please specify the quantity to be calculated.")
         print(" Use the `--help' flag to list all options.\n")
         sys.exit()
 
-    uprint("\n Initializing structure and percolator ... ", end="")
-
+    uprint("\n Reading structure from file '{}'...".format(poscarfile), end="")
     struc = Poscar.from_file(poscarfile).structure
-    percolator = Percolator.from_structure(struc, supercell=supercell)
+    uprint(" done.")
 
-    if common > 0:
-        percolator.set_special_percolation_rule(num_common=common)
+    uprint("\n Setting up lattice and neighbor lists...", end="")
+    lattice = Lattice.from_structure(struc, supercell=supercell)
+    uprint(" done.")
+    uprint(" Initial site occupations taken from structure file.")
+    print(lattice)
 
-    uprint("done.\n")
+    uprint(" Initializing percolator...", end="")
+    percolator = Percolator(lattice)
+    uprint(" done.")
 
-    uprint(" MC percolation simulation")
+    if (common > 0) or same:
+        uprint(" Using percolation rule with {} common neighbor(s).".format(common))
+        uprint(" Require same coordinate: {}".format(same))
+        percolator.set_special_percolation_rule(num_common=common, same=same)
+
+    uprint("\n MC percolation simulation")
     uprint(" -------------------------\n")
+
+    if check:
+
+        #--------------------------------------------------------------#
+        #          check, if initial structure is percolating          #
+        #--------------------------------------------------------------#
+
+        nspan = percolator.check_spanning(verbose=True)
+        
+        if (nspan > 0):
+            uprint(" The initial structure is percolating.\n")
+        else:
+            uprint(" The initial structure is NOT percolating.\n")
 
     if pc:
 
@@ -213,6 +236,11 @@ if (__name__ == "__main__"):
         action  = "store_true")
 
     parser.add_argument(
+        "--check", 
+        help    = "Check, if the initial structure is percolating.",
+        action  = "store_true")
+
+    parser.add_argument(
         "--pinf", "-s",
         help    = "Estimate P_infinity and percolation susceptibility",
         action  = "store_true")
@@ -233,6 +261,12 @@ if (__name__ == "__main__"):
         help    = "Number of common neighbors for two sites to be percolating.",
         type    = int,
         default = 0)
+
+    parser.add_argument(
+        "--same",
+        help    = "Require bonding sites to have the same coordinate in direction 0, 1, or 2.",
+        type    = int,
+        default = None)
 
     parser.add_argument(
         "--file-name",
@@ -259,13 +293,15 @@ if (__name__ == "__main__"):
             save_clusters = args.save_clusters,
             file_name     = args.file_name,
             pc            = args.pc,
+            check         = args.check,
             pinf          = args.pinf,
             pwrap         = args.pwrap,
             bonds         = args.bonds,
             flux          = args.flux,
             inaccessible  = args.inaccessible,
             supercell     = args.supercell,
-            common        = args.common )
+            common        = args.common,
+            same          = args.same )
 
 
 

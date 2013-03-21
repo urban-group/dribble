@@ -47,6 +47,11 @@ class Lattice(object):
         _T_nn[i][j]         the translation vector belonging to _nn[i][j]
         _T_nnn[i][j]        the translation vector belonging to _nnn[i][j]
                             (only computed, if requested)
+        _N_nn               number of nearest neighbors; integer, if all sites
+                            are equivalent, else list of intergers
+        _N_nnn              number of next nearest neighbors; integer, if all 
+                            sites are equivalent, else list of intergers
+                            (only computed, if requested)
         _nsurface           number of sites at cell boundary 
                             (only computed, if requested)
         """
@@ -85,6 +90,8 @@ class Lattice(object):
         self._nnn      = []
         self._T_nn     = []
         self._T_nnn    = []
+        self._N_nn     = 0
+        self._N_nnn    = 0
         self._nsurface = 0
 
         self._build_neighbor_list()
@@ -123,8 +130,10 @@ class Lattice(object):
         ostr += " Lattice vectors:\n\n"
         for v in self._avec:
             ostr += "   {:12.8f}  {:12.8f}  {:12.8f}\n".format(*v)
-        ostr += "\n total number of sites: {}".format(self._nsites)
-        ostr += "\n occupied sites       : {}".format(self.num_occupied)
+        ostr += "\n total number of sites : {}".format(self._nsites)
+        ostr += "\n occupied sites        : {}".format(self.num_occupied)
+        if type(self._N_nn) == int:
+            ostr += "\n number of NNs         : {}".format(self._N_nn)
         ostr += "\n"
         ostr += str(self._nblist)
         return ostr
@@ -198,6 +207,7 @@ class Lattice(object):
         
         nnn   = []
         T_nnn = []
+        N_nnn = np.empty(self._nsites, dtype=int)
 
         pbcdist = self._nblist.get_pbc_distances_and_translations
         for i in xrange(self._nsites):
@@ -223,10 +233,14 @@ class Lattice(object):
                         T_nnn_i.append(Tvec[k])
             nnn.append(nnn_i)
             T_nnn.append(T_nnn_i)
+            N_nnn[i] = len(nnn_i)
 
         self._nnn   = nnn
         self._T_nnn = T_nnn
-
+        if (np.all(N_nnn == N_nnn[0])):
+            self._N_nnn = int(N_nnn[0])
+        else:
+            self._N_nnn = N_nnn
 
     def save_structure(self, file_name="CONTCAR", vacant="V", occupied="O"):
         """
@@ -265,6 +279,7 @@ class Lattice(object):
         """
 
         dNN    = np.empty(self._nsites)
+        N_nn   = np.empty(self._nsites, dtype=int)
         nbs    = range(self._nsites)
         Tvecs  = range(self._nsites)
 
@@ -275,12 +290,19 @@ class Lattice(object):
             nbs[i]   = nbl
             Tvecs[i] = T
             dNN[i]   = np.min(dist)
+            N_nn[i]  = len(nbl)
 
         self._nblist = nblist
-        self._dNN    = dNN
         self._nn     = nbs
         self._T_nn   = Tvecs
-        
+        if (np.all(np.abs(dNN-dNN[0]) < 0.1*dr)):
+            self._dNN = np.min(dNN)
+        else:
+            self._dNN = dNN
+        if (np.all(N_nn == N_nn[0])):
+            self._N_nn = int(N_nn[0])
+        else:
+            self._N_nn = N_nn
 
 #----------------------------------------------------------------------#
 #                              unit test                               #

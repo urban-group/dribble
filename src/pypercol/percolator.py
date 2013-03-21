@@ -273,27 +273,7 @@ class Percolator(object):
 
         return (newsites, nspanning)
 
-
-    def get_cluster_of_site_OLD(self, site, visited=[]):
-        """
-        Recursively determine all other sites connected to SITE.
-        """
-
-        if (self._cluster[site] < 0):
-            return visited
-        
-        visited.append(site)
-        for nb in self._neighbors[site]:
-
-            if ((not (nb in visited)) 
-                and (self._cluster[nb] >= 0) 
-                and self._check_special(site,nb)):
-
-                visited += self.get_cluster_of_site(nb, visited)[len(visited):]
-
-        return visited
-
-    def check_spanning(self):
+    def check_spanning(self, verbose=False):
         """
         Check, how many (if any) spanning clusters are present.
         """
@@ -307,6 +287,10 @@ class Percolator(object):
                 visited += cluster
                 if np.sum(spanning) > 0:
                     nspanning += len(cluster)
+                    if verbose:
+                        uprint(" cluster with {} sites, ".format(len(cluster))
+                               + "paths in (x,y,z): "
+                               + "{} {} {}".format(*spanning))
                 
         return float(nspanning)/float(self.num_occupied)
 
@@ -320,7 +304,7 @@ class Percolator(object):
                     & set(self._neighbors[site2]))
 
 
-    def set_special_percolation_rule(self, num_common=0):
+    def set_special_percolation_rule(self, num_common=0, same=None, dr=0.1):
         """
         Define special criteria for a bond between two occupied sites 
         to be percolating.
@@ -329,6 +313,10 @@ class Percolator(object):
           num_common   number of common neighbors of two sites i and j
                        that have to be occupied to form a percolating
                        bond between i and j.
+          same         0, 1, or 2 --> require same x, y, or z coordinate
+                       for the bonding sites; e.g., same=2 will require 
+                       both sites to be in the same z-layer
+          dr           required precision for two coordinates to be the 'same'
         """
 
         def new_special(site1, site2):
@@ -336,21 +324,30 @@ class Percolator(object):
             Check, if the special percolation rule is fulfilled
             between sites SITE1 and SITE2.
             
-            This instance does indeed define a special rule.
+            This instance defines a special rule.
             """
 
-            percolating = False
+            common_rule = True
+            same_rule   = True
 
-            occupied = 0
-            common_neighbors = self.get_common_neighbors(site1, site2)
+            if same and (0 <= same <= 2):
+                if (abs(self._coo[site1][same]-self._coo[site2][same])<=dr):
+                    same_rule = True
+                else:
+                    same_rule = False
 
-            for nb in common_neighbors:
-                if self._cluster[nb] >= 0:
-                    occupied += 1
-                if occupied >= num_common:
-                    percolating = True
-                    break
+            if num_common > 0:
+                common_rule = False
+                occupied = 0
+                common_neighbors = self.get_common_neighbors(site1, site2)
+                for nb in common_neighbors:
+                    if self._cluster[nb] >= 0:
+                        occupied += 1
+                    if occupied >= num_common:
+                        common_rule = True
+                        break
 
+            percolating = (common_rule and same_rule)
             return percolating
 
         self._special       = True
