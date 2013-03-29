@@ -4,6 +4,8 @@
 Insert description here.
 """
 
+from __future__ import print_function
+
 __author__ = "Alexander Urban"
 __date__   = "2013-01-19"
 
@@ -15,14 +17,22 @@ EPS   = 100.0*np.finfo(np.float).eps
 
 class NeighborList(object):
 
-    def __init__(self, lattice_vectors, frac_coordinates, 
+    def __init__(self, coordinates, lattice_vectors=None, cartesian=False, 
                  types=None,  interaction_range=None, 
-                 natoms_per_box=10, nboxes=None):
+                 natoms_per_box=10, nboxes=None, tolerance=0.05):
         """
+        coordinates       Nx3 2-dimensional array whose N rows are
+                          the (initial) coordinates; fractional lattice 
+                          coordinates are expected, unless the option
+                          'cartesian' is True, or no lattice vectors
+                          are specified
         lattice_vectors   3x3 2-dimensional array whose rows are 
-                          the lattice vectors
-        frac_coordinates  Nx3 2-dimensional array whose N rows are
-                          the (initial) coordinates
+                          the lattice vectors; if no lattice vectors
+                          are specified, the smalles wrapping box will
+                          be determined, and coordinates will be assumed
+                          to be cartesian
+        cartesian         input coordinates are cartesian; they
+                          will be converted to fractional coordinates
         types             (optional) vector of length N with types
                           for each coordinate (e.g., atomic species)
         interaction_range (optional) if not present, only nearest neighbors
@@ -31,13 +41,34 @@ class NeighborList(object):
                           when the lattice cell is partinioned into boxes
         nboxes            (optional) tuple of length 3 with the numbers
                           of boxes per lattice direction
+        tolerance         accuracy for distance comparisons
         """
 
-        self._avec  = np.array(lattice_vectors)
-        self._coo   = np.array(frac_coordinates)
+        if (type(lattice_vectors) == type(None)):
+            cartesian = True
+            self._pbc = False
+            coordinates = np.array(coordinates)
+            cmin = np.min(coordinates,0)
+            cmax = np.max(coordinates,0)
+            xyz  = cmax - cmin
+            self._avec = np.array([[xyz[0], 0.0, 0.0],
+                                   [0.0, xyz[1], 0.0],
+                                   [0.0, 0.0, xyz[2]]])
+            coordinates -= cmin
+        else:
+            self._pbc  = True
+            self._avec = np.array(lattice_vectors)
+
+        # coordinates
+        if cartesian:
+            self._coo = self.cart2frac(coordinates)
+        else:
+            self._coo = np.array(coordinates)
+
         self._ncoo  = len(self._coo)
         self._types = types
         self._range = interaction_range
+        self._tol   = tolerance
 
         if nboxes:
             self._nboxes = tuple(nboxes)
@@ -56,14 +87,15 @@ class NeighborList(object):
         self._next       = np.zeros(self._ncoo, dtype=int)
 
         # determine `star' of periodic lattice cells within range
-        self._T_latt = np.array([[0,0,0]] + self.star_setup(self._avec, self._range))
+        self._T_latt = (np.array([[0,0,0]] 
+                     + self.star_setup(self._avec, self._range, self._tol)))
             
         # determine `star' of boxes that has to be checked for neighbors
         avec_box     = self._avec.copy()
         avec_box[0] /= float(self._nboxes[0])
         avec_box[1] /= float(self._nboxes[1])
         avec_box[2] /= float(self._nboxes[2])
-        T_box = self.star_setup(avec_box, self._range)
+        T_box = self.star_setup(avec_box, self._range, self._tol)
         # represent these T vectors in the grid base to reduce their
         # number to the unique ones only:
         self._T_box = []
@@ -178,12 +210,14 @@ class NeighborList(object):
 
         return nbl
 
-    def get_neighbors_and_distances(self, i, r=None):
+    def get_neighbors_and_distances(self, i, r=None, dr=None):
         """
         Get a list of coordinates within the interaction range.
 
         Arguments:
           i     the index of the coordinate, i.e., i of `coords[i]'
+          r     interaction range smaller than the global range 
+          dr    accuracy for distance comparisons
 
         Returns:
           tuple (nbl, dist, Tvecs) where `nbl' is a list of the neighbors,
@@ -198,10 +232,13 @@ class NeighborList(object):
         dist  = []
         Tvecs = []
 
+        if not dr:
+            dr = self._tol
+
         if r and (r <= self._range):
-            r2 = r*r
+            r2 = (r+dr)**2
         elif self._range:
-            r2 = self._range*self._range
+            r2 = (self._range+dr)**2
         else:
             print("Error: no range specified.")
             print("Use: get_nearest_neighbors() instead")
@@ -402,11 +439,57 @@ class NeighborList(object):
                         Tvecs.append(T)
 
         return (dist, Tvecs)
-                
+
+    #----------------- auxiliary (but of general use) -----------------#
+    
+    def cart2frac(self, cart_coords, avec=None):
+        """
+        Convert Cartesian coordinates to fractional lattice coordinates.
+
+        Arguments:
+          cart_coords[i,j]  j-th component of the Cartesian coordinates of
+                            the i-th particle
+          avec[i,j]         j-th component of the i-th lattice vector;
+                            if no lattice vectors are given, self._avec 
+                            will be used
+
+        Returns:
+          frac_coords  ndarray with the fractional coordinates
+        """
+
+        if (type(avec) == type(None)):
+            avec = self._avec
+
+        bvec = np.linalg.inv(avec)
+        frac_coords = np.dot(np.array(cart_coords), bvec)
+
+        return frac_coords
+
+    def frac2cart(self, frac_coords, avec=None):
+        """
+        Convert fractional lattice coordinates to Cartesian coordinates.
+
+        Arguments:
+          frac_coords[i,j]   j-th component of the Cartesian coordinates of
+                             the i-th particle
+          avec[i,j]          j-th component of the i-th lattice vector;
+                             if no lattice vectors are given, self._avec 
+                             will be used
+
+        Returns:
+          cart_coords  ndarray with the Cartesian coordinates
+        """
+
+        if (type(avec) == type(None)):
+            avec = self._avec
+
+        cart_coords = np.dot(np.array(frac_coords), avec)
+
+        return cart_coords
 
     #------------ translation vectors (boxes and lattice) -------------#
 
-    def star_setup(self, lattice_vectors, interaction_range=None):
+    def star_setup(self, lattice_vectors, interaction_range=None, dr=0.1):
         """
         Determine all translation vectors within the interaction range
         for the lattice defined by the given lattice vectors.
@@ -416,6 +499,7 @@ class NeighborList(object):
           interaction_range  the range of the interaction; if not 
                              specified, only the nearest neighbors will
                              be considered
+          dr                 accuracy for distance comparisons
 
         Returns:
           A list containing the translation vectors.
@@ -427,14 +511,16 @@ class NeighborList(object):
         """
 
         star = []
+        common = []
 
         # The 26 immediate neighbors of the home box always have to be
         # considered.
         for ix in range(-1,2):
             for iy in range(-1,2):
                 for iz in range(-1,2):
+                    T = (ix,iy,iz)
+                    common.append(T)
                     if (ix,iy,iz) != (0,0,0):
-                        T = (ix,iy,iz)
                         if not (T in star):
                             star.append(T)
 
@@ -451,17 +537,23 @@ class NeighborList(object):
         if not interaction_range:
             return star
 
-        r2 = interaction_range*interaction_range
+        r2 = (interaction_range + dr)**2
 
         # lattice vectors of the box grid
         avec = np.copy(lattice_vectors)
 
-        # boxes that share the common corner (0,0,0)
-        common = [ ( 0, 0, 0), (-1, 0, 0), ( 0,-1, 0), ( 0, 0,-1),
-                   (-1,-1, 0), (-1, 0,-1), ( 0,-1,-1), (-1,-1,-1) ]
+        # sign permutations:
+        signs = [[ 1, 1, 1],
+                 [-1, 1, 1],
+                 [ 1,-1, 1],
+                 [ 1, 1,-1],
+                 [ 1,-1,-1],
+                 [-1, 1,-1],
+                 [-1,-1, 1],
+                 [-1,-1,-1]]
 
         """
-        Now the following buch of code loops over increasingly long
+        Now the following bunch of code loops over increasingly long
         translation vectors and checks, if they are still within the
         interaction range.  If so, all boxes with a corner that can be 
         reached with this T vector are added to the star.
@@ -480,7 +572,7 @@ class NeighborList(object):
                         continue
 
                     vec = np.dot((ix,iy,iz),avec)
-                    d2 = np.sum(vec*vec)
+                    d2  = np.sum(vec*vec)
                     if (d2 - EPS < r2):
 
                         """
@@ -492,12 +584,11 @@ class NeighborList(object):
                         """
 
                         for T in common:
-                            T_new = tuple(np.add((ix,iy,iz), T))
-                            if (not (T_new in star)) and (not np.all(T_new == (0,0,0))):
-                                star.append(T_new)
-                            T_new = tuple(np.add((-ix,-iy,-iz), T))
-                            if (not (T_new in star)) and (not np.all(T_new == (0,0,0))):
-                                star.append(T_new)
+                            for s in signs:
+                                T_new = tuple(np.add((ix,iy,iz), T)*s)
+                                if (not (T_new in star)) and (not np.all(T_new == (0,0,0))):
+                                    star.append(T_new)
+
                         found_one_y = True
                     else:
                         break
@@ -625,4 +716,107 @@ class NeighborList(object):
 
         return ids
 
+
+#----------------------------------------------------------------------#
+#                              unit test                               #
+#----------------------------------------------------------------------#
+
+if __name__ == "__main__":
+
+    #----------------------------- Test 1 -----------------------------#
+
+    print("\n Test 1: FCC primitive unit cell (a = 1.0), NNs only")
+    print(" ---------------------------------------------------")
+
+    avec = np.array([ [0.0, 0.5, 0.5],
+                      [0.5, 0.0, 0.5],
+                      [0.5, 0.5, 0.0] ])*1.0
+
+    coo = np.array([[0.0, 0.0, 0.0]])
+
+    nbl = NeighborList(coo, lattice_vectors=avec)
+
+    print(nbl)
+
+    print(" checking number of nearest neighbors (12 for FCC) ... ", end="")
+    (nn, dist, T) = nbl.get_nearest_neighbors(0)
+    if (len(nn) != 12):
+        print("FAILED!\n")
+        print(" {} neighbors found: {}".format(len(nn), nn))
+    else:
+        print("passed.\n")
+        print(" {} neighbors found".format(len(nn)))
+        print(" distance = {}".format(dist[0]))
+
+    print("")
+
+    #----------------------------- Test 2 -----------------------------#
+
+    print("\n Test 2: FCC primitive unit cell (a = 1.0), r_cut = 2a")
+    print(" -----------------------------------------------------")
+
+    a=1.0
+
+    avec = np.array([ [0.0, 0.5, 0.5],
+                      [0.5, 0.0, 0.5],
+                      [0.5, 0.5, 0.0] ])*a
+
+    coo = np.array([[0.0, 0.0, 0.0]])
+
+    nbl = NeighborList(coo, lattice_vectors=avec, interaction_range=2.0*a)
+
+    print(nbl)
+
+    print(" neighbors within d = 2a = {}\n".format(2*a))
+    (nn, dist, T) = nbl.get_neighbors_and_distances(0)
+    
+    idx = np.argsort(dist)
+    n = 1
+    d = dist[idx[0]]
+    for i in idx[1:]:
+        if (abs(dist[i]-d)<0.05):
+            n += 1
+        else:
+            print(" {:3d} sites at distance d/a = {}".format(n, d))
+            d = dist[i]
+            n = 1
+    print(" {:3d} sites at distance d/a = {}".format(n, d))
+
+    #----------------------------- Test 3 -----------------------------#
+
+    print("\n Test 3: same, but FCC conventional cell and Cartesian coordinates")
+    print(" -----------------------------------------------------------------")
+
+    a = 2.0
+    
+    avec = np.array([ [1.0, 0.0, 0.0],
+                      [0.0, 1.0, 0.0],
+                      [0.0, 0.0, 1.0] ])*a
+
+    coo = np.array([ [0.0, 0.0, 0.0],
+                     [0.0, 1.0, 1.0],
+                     [1.0, 0.0, 1.0],
+                     [1.0, 1.0, 0.0] ])
+
+    nbl = NeighborList(coo, lattice_vectors=avec, cartesian=True, 
+                       interaction_range=2.0*a)
+
+    print(nbl)
+
+    print(" neighbors within d = 2a = {}\n".format(2*a))
+    (nn, dist, T) = nbl.get_neighbors_and_distances(0)
+    
+    idx = np.argsort(dist)
+    n = 1
+    d = dist[idx[0]]
+    for i in idx[1:]:
+        if (abs(dist[i]-d)<0.05):
+            n += 1
+        else:
+            print(" {:3d} sites at distance d/a = {}".format(n, d/a))
+            d = dist[i]
+            n = 1
+    print(" {:3d} sites at distance d/a = {}".format(n, d/a))
+
+    print("")
 

@@ -283,7 +283,7 @@ class Lattice(object):
         nbs    = range(self._nsites)
         Tvecs  = range(self._nsites)
 
-        nblist = NeighborList(self._avec, self._coo)
+        nblist = NeighborList(self._coo, lattice_vectors=self._avec)
         
         for i in xrange(self._nsites):
             (nbl, dist, T) = nblist.get_nearest_neighbors(i, dr=dr)
