@@ -21,7 +21,7 @@ from pypercol.aux import uprint
 def percol(poscarfile, samples, save_clusters=False, 
            file_name="percol.out", pc=False, check=False, pinf=False, 
            pwrap=False, bonds=False, flux=False, inaccessible=False, 
-           supercell=[1,1,1], common=0, same=None):
+           supercell=[1,1,1], common=0, same=None, require_NN=False):
 
     if not (check or pc or pinf or pwrap or bonds or flux or inaccessible):
         print("\n Nothing to do.")
@@ -45,8 +45,11 @@ def percol(poscarfile, samples, save_clusters=False,
 
     if (common > 0) or same:
         uprint(" Using percolation rule with {} common neighbor(s).".format(common))
+        if require_NN:
+            uprint(" Require the common neighbors to be themselves nearest neighbors.")
         uprint(" Require same coordinate: {}".format(same))
-        percolator.set_special_percolation_rule(num_common=common, same=same)
+        percolator.set_special_percolation_rule(
+            num_common=common, same=same, require_NN=require_NN)
 
     uprint("\n MC percolation simulation")
     uprint(" -------------------------\n")
@@ -74,7 +77,7 @@ def percol(poscarfile, samples, save_clusters=False,
             (pc_site_any, pc_site_two, pc_site_all,
              pc_bond_any, pc_bond_two, pc_bond_all,
             ) = percolator.percolation_point(
-                samples=samples, file_name=file_name+".cluster")
+                samples=samples, file_name=file_name+".vasp")
         else: 
             (pc_site_any, pc_site_two, pc_site_all,
              pc_bond_any, pc_bond_two, pc_bond_all,
@@ -269,6 +272,13 @@ if (__name__ == "__main__"):
         default = None)
 
     parser.add_argument(
+        "--require-NN",
+        help    = "Require the comon NNs (defined by using the --common flag) "
+                + "to be themselves nearest neighbors.",
+        action  = "store_true",
+        dest    = "require_NN")
+
+    parser.add_argument(
         "--file-name",
         help    = "base file name for all output files",
         default = "percol")
@@ -301,7 +311,8 @@ if (__name__ == "__main__"):
             inaccessible  = args.inaccessible,
             supercell     = args.supercell,
             common        = args.common,
-            same          = args.same )
+            same          = args.same,
+            require_NN    = args.require_NN)
 
 
 

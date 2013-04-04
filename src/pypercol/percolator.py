@@ -300,11 +300,20 @@ class Percolator(object):
         Returns a list of common neighbor sites of SITE1 and SITE2.
         """
 
-        return list(set(self._neighbors[site1]) 
-                    & set(self._neighbors[site2]))
+        nb1 = self._neighbors[site1]
+        nb2 = self._neighbors[site2]
+        common = []
+        for n in nb1:
+            if n in nb2:
+                common.append(n)
+        return common
+
+        # Note, the above is slightly faster than simply:
+        # return list(set(self._neighbors[site1]) 
+        #             & set(self._neighbors[site2]))
 
 
-    def set_special_percolation_rule(self, num_common=0, same=None, dr=0.1):
+    def set_special_percolation_rule(self, num_common=0, same=None, require_NN=False, dr=0.1):
         """
         Define special criteria for a bond between two occupied sites 
         to be percolating.
@@ -316,8 +325,17 @@ class Percolator(object):
           same         0, 1, or 2 --> require same x, y, or z coordinate
                        for the bonding sites; e.g., same=2 will require 
                        both sites to be in the same z-layer
+          require_NN   if True, the 'num_common' criterion additionally requires
+                       the common nearest neighbors themselves to be 
+                       nearest neighbors (useful for diffusion on an fcc lattice)
           dr           required precision for two coordinates to be the 'same'
         """
+
+        if (require_NN and (num_common < 2)):
+            stderr.write("Error: the percolation rule does not make sense!\n")
+            stderr.write("       {} common neighbors can not be required\n")
+            stderr.write("       to be nearest neighbors themselves!\n")
+            sys.exit()
 
         def new_special(site1, site2):
             """
@@ -329,6 +347,7 @@ class Percolator(object):
 
             common_rule = True
             same_rule   = True
+            NN_rule     = True
 
             if same and (0 <= same <= 2):
                 if (abs(self._coo[site1][same]-self._coo[site2][same])<=dr):
@@ -336,18 +355,33 @@ class Percolator(object):
                 else:
                     same_rule = False
 
-            if num_common > 0:
+            if (num_common > 0) and same_rule:
                 common_rule = False
-                occupied = 0
-                common_neighbors = self.get_common_neighbors(site1, site2)
-                for nb in common_neighbors:
-                    if self._cluster[nb] >= 0:
-                        occupied += 1
-                    if occupied >= num_common:
+                common_nb = self.get_common_neighbors(site1, site2)
+                occupied = []
+                noccup   = 0
+                for nb in common_nb:
+                    if (self._cluster[nb] >= 0):
+                        occupied.append(nb)
+                        noccup += 1
+                    if (noccup >= num_common):
                         common_rule = True
-                        break
 
-            percolating = (common_rule and same_rule)
+            if (require_NN and common_rule and same_rule):
+                NN_rule = False
+                for i in range(noccup):
+                    site1 = occupied[i]
+                    nb1 = self._neighbors[site1]
+                    num_NN = 1
+                    for j in range(i+1,noccup):
+                        site2 = occupied[j]
+                        if site2 in nb1:
+                            num_NN +=1
+                            if (num_NN >= num_common):
+                                NN_rule = True 
+                                break
+                        
+            percolating = (common_rule and same_rule and NN_rule)
             return percolating
 
         self._special       = True
@@ -729,8 +763,8 @@ class Percolator(object):
                         "Error: All sites occupied, but no wrapping cluster!?"
                         + "\n       "
                         + "Maybe you defined a percolation rule that never percolates."
-                        + "\n       Have a look at `POSCAR-Error'.\n")
-                    self.save_cluster(self._largest, file_name="POSCAR-Error")
+                        + "\n       Have a look at `ERROR.vasp'.\n")
+                    self.save_cluster(self._largest, file_name="ERROR.vasp")
                     print(wrapping)
                     sys.exit()
 
@@ -740,7 +774,7 @@ class Percolator(object):
                 pc_bond_any, pc_bond_two, pc_bond_all)
 
 
-    def save_cluster(self, cluster, file_name="CLUSTER"):
+    def save_cluster(self, cluster, file_name="CLUSTER.vasp"):
         """
         Save a particular cluster to an output file.
         Relies on `pymatgen' for the file I/O.
@@ -749,12 +783,12 @@ class Percolator(object):
         from pymatgen.core.structure import Structure
         from pymatgen.io.vaspio      import Poscar
 
-        species = ["H" for i in range(self._nsites)]
+        species = ["V" for i in range(self._nsites)]
         i = self._first[cluster]
-        species[i] = "C"
+        species[i] = "O"
         while (self._next[i] >= 0):
             i = self._next[i]
-            species[i] = "C"
+            species[i] = "O"
 
         species = np.array(species)
         idx = np.argsort(species)
@@ -763,7 +797,7 @@ class Percolator(object):
         poscar = Poscar(struc)
         poscar.write_file(file_name)
 
-    def save_neighbors(self, site, file_name="NEIGHBORS"):
+    def save_neighbors(self, site, file_name="NEIGHBORS.vasp"):
         """
         Save neighbors of site SITE to an output file.
         """
@@ -771,10 +805,10 @@ class Percolator(object):
         from pymatgen.core.structure import Structure
         from pymatgen.io.vaspio      import Poscar
 
-        species = ["H" for i in range(self._nsites)]
-        species[site] = "C"
+        species = ["V" for i in range(self._nsites)]
+        species[site] = "O"
         for nb in self._neighbors[site]:
-            species[nb] = "C"
+            species[nb] = "O"
 
         species = np.array(species)
         idx = np.argsort(species)
