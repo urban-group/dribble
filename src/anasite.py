@@ -117,11 +117,11 @@ def circumsphere(nodes):
     f += C[2]*(A[1]*(D[0]-B[0]) - B[1]*(D[0]-A[0]) + D[1]*(B[0]-A[0])) 
     f -= D[2]*(A[1]*(C[0]-B[0]) - B[1]*(C[0]-A[0]) + C[1]*(B[0]-A[0]))
 
-#    if (f <= EPS):
-#        sys.stderr.write(
-#            "Error: There is no circumsphere. "
-#            + "All point lie in the same plain.")
-#        sys.exit()
+    if (f <= EPS):
+        sys.stderr.write(
+            "Error: There is no circumsphere. "
+            + "All point lie in the same plain.")
+        sys.exit()
 
     f = 0.5/f
 
@@ -173,7 +173,6 @@ def analyze_sites(infile, r_cut, site_species='Li', frame_species='O'):
 
     sites = np.arange(len(coords))[types == site_species]
 
-   
     for s in sites:
         (nbl, d, T) = nblist.get_neighbors_and_distances(s)
         idx = (types[nbl] == frame_species)
@@ -184,6 +183,8 @@ def analyze_sites(infile, r_cut, site_species='Li', frame_species='O'):
             V += tetrahedron_volume(nodes[tet])
         print("{:5d}  {:2s} {:2s} {:2d} {:6.2f}".format(
             s+1, types[s], frame_species, len(nodes), V))
+
+    sys.stdout.flush()
 
 #----------------------------------------------------------------------#
 
