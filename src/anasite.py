@@ -11,9 +11,14 @@ __date__   = "2013-04-05"
 
 import argparse
 import numpy as np
+import sys
+
+from scipy.spatial import Delaunay
 
 from pymatgen.io.vaspio import Poscar
-from pypercol.lattice   import Lattice
+from pypercol.pynblist  import NeighborList
+
+EPS   = 100.0*np.finfo(np.float).eps
 
 #----------------- volume of an irregular tetrahedron -----------------#
 
@@ -97,20 +102,88 @@ def tetrahedron_volume_heron(nodes):
     return V
 
 
+#------------------- circumsphere of a tetrahedron --------------------#
+
+def circumsphere(nodes):
+
+    (A, B, C, D) = nodes
+    A = np.array(A)
+    B = np.array(B)
+    C = np.array(C)
+    D = np.array(D)
+
+    f  = A[2]*(B[1]*(D[0]-C[0]) - C[1]*(D[0]-B[0]) + D[1]*(C[0]-B[0])) 
+    f -= B[2]*(A[1]*(D[0]-C[0]) - C[1]*(D[0]-A[0]) + D[1]*(C[0]-A[0])) 
+    f += C[2]*(A[1]*(D[0]-B[0]) - B[1]*(D[0]-A[0]) + D[1]*(B[0]-A[0])) 
+    f -= D[2]*(A[1]*(C[0]-B[0]) - B[1]*(C[0]-A[0]) + C[1]*(B[0]-A[0]))
+
+#    if (f <= EPS):
+#        sys.stderr.write(
+#            "Error: There is no circumsphere. "
+#            + "All point lie in the same plain.")
+#        sys.exit()
+
+    f = 0.5/f
+
+    xyz1 = A*A
+    xyz2 = B*B
+    xyz3 = C*C
+    xyz4 = D*D
+
+    d21  = xyz2 - xyz1
+    d31  = xyz3 - xyz1
+    d41  = xyz4 - xyz1
+    d32  = xyz3 - xyz2
+    d42  = xyz4 - xyz2
+    d43  = xyz4 - xyz3
+
+    x0   =  f*( A[2]*(B[1]*d43 - C[1]*d42 + D[1]*d32) 
+              - B[2]*(A[1]*d43 - C[1]*d41 + D[1]*d31) 
+              + C[2]*(A[1]*d42 - B[1]*d41 + D[1]*d21) 
+              - D[2]*(A[1]*d32 - B[1]*d31 + C[1]*d21) )
+
+    y0   = -f*( A[2]*(B[0]*d43 - C[0]*d42 + D[0]*d32) 
+              - B[2]*(A[0]*d43 - C[0]*d41 + D[0]*d31) 
+              + C[2]*(A[0]*d42 - B[0]*d41 + D[0]*d21) 
+              - D[2]*(A[0]*d32 - B[0]*d31 + C[0]*d21) )
+
+    z0   =  f*( A[1]*(B[0]*d43 - C[0]*d42 + D[0]*d32) 
+              - B[1]*(A[0]*d43 - C[0]*d41 + D[0]*d31) 
+              + C[1]*(A[0]*d42 - B[0]*d41 + D[0]*d21) 
+              - D[1]*(A[0]*d32 - B[0]*d31 + C[0]*d21) )
+
+    O = np.array([x0,y0,z0])
+    R = np.linalg.norm(O - A)
+ 
+    return (O, R)
+
+
 #----------------------------------------------------------------------#
 
-def analyze_sites(infile):
+def analyze_sites(infile, r_cut, site_species='Li', frame_species='O'):
 
-    struc = Poscar.from_file(infile).structure
-    lattice = Lattice.from_structure(struc)
-
-    for i in xrange(lattice.num_sites):
-        nb = lattice.nn[i]
-        for j in nb:
-            if (j<i):
-                continue
-            
+    struc  = Poscar.from_file(infile).structure
+    avec   = np.array(struc.lattice.matrix)
+    coords = np.array(struc.frac_coords)
+    cart   = np.dot(coords, avec)
+    types  = np.array([s.symbol for s in struc.species])
     
+    nblist = NeighborList(coords, lattice_vectors=avec, types=types, 
+                          interaction_range=r_cut)
+
+    sites = np.arange(len(coords))[types == site_species]
+
+   
+    for s in sites:
+        (nbl, d, T) = nblist.get_neighbors_and_distances(s)
+        idx = (types[nbl] == frame_species)
+        nodes = cart[np.array(nbl)[idx]] + np.dot(np.array(T)[idx], avec)
+        d = Delaunay(nodes)
+        V  = 0.0
+        for tet in d.vertices:
+            V += tetrahedron_volume(nodes[tet])
+        print("{:5d}  {:2s} {:2s} {:2d} {:6.2f}".format(
+            s+1, types[s], frame_species, len(nodes), V))
 
 #----------------------------------------------------------------------#
 
@@ -124,6 +197,29 @@ if (__name__ == "__main__"):
         "input_file",
         help    = "Input file in VASP's POSCAR format.")
 
+    parser.add_argument(
+        "--range", "-r",
+        help    = "Interaction range (cut-off redius).",
+        type    = float,
+        default = "3.0",
+        dest    = "r_cut")
+
+    parser.add_argument(
+        "--site-species",
+        help    = "Species whose sites shall be analyzed (default: Li).",
+        type    = str,
+        default = "Li")
+
+    parser.add_argument(
+        "--frame-species",
+        help    = "Species that geometrically defines sites (default: O).",
+        type    = str,
+        default = "O")
+
     args = parser.parse_args()
 
-    analyze_sites(infile = args.input_file)
+    analyze_sites( infile        = args.input_file,
+                   r_cut         = args.r_cut,
+                   site_species  = args.site_species,
+                   frame_species = args.frame_species )
+

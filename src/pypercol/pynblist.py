@@ -116,8 +116,8 @@ class NeighborList(object):
         Keyword arguments are passed on to the regular constructor.
         """
 
-        nbl = cls(structure.lattice.matrix, structure.frac_coords,
-                  structure.species, **kwargs)
+        nbl = cls(structure.frac_coords, lattice_vectors=structure.lattice.matrix,
+                  types=structure.species, **kwargs)
         
         return nbl
 
