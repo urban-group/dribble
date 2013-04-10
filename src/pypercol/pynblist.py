@@ -820,3 +820,47 @@ if __name__ == "__main__":
 
     print("")
 
+    #----------------------------- Test 4 -----------------------------#
+
+    print("\n Test 4: rock salt structure")
+    print(" -----------------------------------------------------------------")
+
+    a = 5.64
+    
+    avec = np.array([ [1.0, 0.0, 0.0],
+                      [0.0, 1.0, 0.0],
+                      [0.0, 0.0, 1.0] ])*a
+
+    coo = np.array([ [0.0, 0.0, 0.0],
+                     [0.0, 0.5, 0.5],
+                     [0.5, 0.0, 0.5],
+                     [0.5, 0.5, 0.0],
+                     [0.5, 0.0, 0.0],
+                     [0.5, 0.5, 0.5],
+                     [0.0, 0.0, 0.5],
+                     [0.0, 0.5, 0.0] ])
+
+    types = ['Na', 'Na', 'Na', 'Na', 'Cl', 'Cl', 'Cl', 'Cl']
+
+    nbl = NeighborList(coo, lattice_vectors=avec, types=types, interaction_range=2.0*a)
+
+    print(nbl)
+
+    print(" neighbors within d = 2a = {} of a {} atom\n".format(2*a, types[0]))
+    (nn, dist, T) = nbl.get_neighbors_and_distances(0)
+    
+    idx = np.argsort(dist)
+    n = 1
+    d = dist[idx[0]]
+    for i in idx[1:]:
+        if (abs(dist[i]-d)<0.05):
+            n += 1
+            t = types[nn[i]]
+        else:
+            print(" {:3d} sites of type {} at distance d/a = {}".format(n, t, d/a))
+            d = dist[i]
+            n = 1
+    print(" {:3d} sites of type {} at distance d/a = {}".format(n, t, d/a))
+
+    print("")
+
