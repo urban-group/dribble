@@ -202,7 +202,7 @@ def circumsphere(nodes):
 #----------------------------------------------------------------------#
 
 def analyze_sites(infile, r_cut, site_species='Li', frame_species='O',
-                  tet_only=False, verbose=False):
+                  tet_only=False, verbose=False, NNN=False, dd=1.0):
 
     struc  = Poscar.from_file(infile).structure
     avec   = np.array(struc.lattice.matrix)
@@ -215,7 +215,8 @@ def analyze_sites(infile, r_cut, site_species='Li', frame_species='O',
 
     sites = np.arange(len(coords))[types == site_species]
 
-    distances = []
+    dist_min  = []
+    dist_av   = []
     volumes   = []
 
     for s in sites:
@@ -226,10 +227,27 @@ def analyze_sites(infile, r_cut, site_species='Li', frame_species='O',
         T   = np.array(T)[idx]
         d   = np.array(d)[idx]
 
+        if NNN:
+            # filter out first neighbor shell:
+            d_min = np.min(d)
+            idx = (d > d_min + dd)
+            nbl = nbl[idx]
+            T   = T[idx]
+            d   = d[idx]
+            idx = np.argsort(d)
+            nbl = nbl[idx]
+            T   = T[idx]
+            d   = d[idx]
+            if (len(nbl)>8):
+                nbl = nbl[0:8]
+                T   = T[0:8]
+                d   = d[0:8]
+
         if (tet_only and len(nbl) != 4):
             continue
 
         d_min = np.min(d)
+        d_av  = np.sum(d)/len(d)
         
         # nodes defining the site polyhedron
         nodes = cart[nbl] + np.dot(T, avec)
@@ -243,13 +261,14 @@ def analyze_sites(infile, r_cut, site_species='Li', frame_species='O',
 
         if tet_only:
             H = tetrahedron_heights(nodes)
-            print("{:5d}  {:2s} {:2s} {:2d} {:8.4f} {:6.2f} {:8.4f}".format(
-                s+1, types[s], frame_species, len(nodes), d_min, V, H[0]))            
+            print("{:5d}  {:2s} {:2s} {:2d} {:8.4f} {:8.4f} {:6.2f} {:8.4f}".format(
+                s+1, types[s], frame_species, len(nodes), d_min, d_av, V, H[0]))            
         else:
-            print("{:5d}  {:2s} {:2s} {:2d} {:8.4f} {:6.2f}".format(
-                s+1, types[s], frame_species, len(nodes), d_min, V))
+            print("{:5d}  {:2s} {:2s} {:2d} {:8.4f} {:8.4f} {:6.2f}".format(
+                s+1, types[s], frame_species, len(nodes), d_min, d_av, V))
 
-        distances.append(d_min)
+        dist_min.append(d_min)
+        dist_av.append(d_av)
         volumes.append(V)
 
     if (len(volumes) > 0) and verbose:
@@ -258,18 +277,18 @@ def analyze_sites(infile, r_cut, site_species='Li', frame_species='O',
         V_max = np.max(volumes)
         V_min = np.min(volumes)
     
-        d_min_av  = np.sum(distances)/len(distances)
-        d_min_min = np.min(distances)
+        d_av  = np.sum(dist_av)/len(dist_av)
+        d_min = np.min(dist_min)
 
         print("")
         print(" average site volume: {:.2f} A^3".format(V_av))
         print(" maximum site volume: {:.2f} A^3".format(V_max))
         print(" minimum site volume: {:.2f} A^3".format(V_min))
         print("")
-        print(" average minimal {}-{} distance: {:.3f} A".format(
-            site_species, frame_species, d_min_av))
-        print(" global minimal {}-{} distance : {:.3f} A".format(
-            site_species, frame_species, d_min_min))
+        print(" average average {}-{} distance: {:.3f} A".format(
+            site_species, frame_species, d_av))
+        print(" minimal minimal {}-{} distance: {:.3f} A".format(
+            site_species, frame_species, d_min))
         print("")
 
     sys.stdout.flush()
@@ -315,6 +334,12 @@ if (__name__ == "__main__"):
         help    = "Print summary of the results.",
         action  = "store_true")
 
+    parser.add_argument(
+        "--second-nearest", "--nnn",
+        help    = "Consider second nearest frame atoms.",
+        action  = "store_true",
+        dest    = "second_nearest")
+
     args = parser.parse_args()
 
     analyze_sites( infile        = args.input_file,
@@ -322,5 +347,6 @@ if (__name__ == "__main__"):
                    site_species  = args.site_species,
                    frame_species = args.frame_species,
                    tet_only      = args.tetrahedrons,
-                   verbose       = args.verbose )
+                   verbose       = args.verbose,
+                   NNN           = args.second_nearest )
 
