@@ -102,6 +102,47 @@ def tetrahedron_volume_heron(nodes):
     return V
 
 
+#---------------------- heights in a tetrahedron ----------------------#
+
+def tetrahedron_heights(nodes):
+    """
+    Calculates and returns the three four heights of an irregular tetrahedron.
+
+    Arguments:
+      nodes == [A, B, C, D]   list of corners of the tetrahedron with
+                              P == (p_x, p_y, p_2) being the Cartesian
+                              coordinates of point P for P in A, B, C, D
+
+    Returns:
+      volume list of heights
+    """
+
+    (A, B, C, D) = nodes
+
+    AB = B - A
+    AC = C - A
+    AD = D - A
+    BC = C - B
+    BD = D - B
+    
+    # normal vectors on the tetrahedron faces
+    n = np.cross(AB,AC)
+    n_ABC = n/np.linalg.norm(n)
+    n = np.cross(AC,AD)
+    n_ACD = n/np.linalg.norm(n)
+    n = np.cross(AB,AD)
+    n_ABD = n/np.linalg.norm(n)
+    n = np.cross(BC,BD)
+    n_BCD = n/np.linalg.norm(n)
+
+    # heights
+    h_A = abs(np.dot(AB,n_BCD))
+    h_B = abs(np.dot(AB,n_ACD))
+    h_C = abs(np.dot(AC,n_ABD))
+    h_D = abs(np.dot(AD,n_ABC))
+
+    return np.sort([h_A, h_B, h_C, h_D])
+
 #------------------- circumsphere of a tetrahedron --------------------#
 
 def circumsphere(nodes):
@@ -160,7 +201,8 @@ def circumsphere(nodes):
 
 #----------------------------------------------------------------------#
 
-def analyze_sites(infile, r_cut, site_species='Li', frame_species='O'):
+def analyze_sites(infile, r_cut, site_species='Li', frame_species='O',
+                  tet_only=False, verbose=False):
 
     struc  = Poscar.from_file(infile).structure
     avec   = np.array(struc.lattice.matrix)
@@ -173,16 +215,62 @@ def analyze_sites(infile, r_cut, site_species='Li', frame_species='O'):
 
     sites = np.arange(len(coords))[types == site_species]
 
+    distances = []
+    volumes   = []
+
     for s in sites:
+
         (nbl, d, T) = nblist.get_neighbors_and_distances(s)
         idx = (types[nbl] == frame_species)
-        nodes = cart[np.array(nbl)[idx]] + np.dot(np.array(T)[idx], avec)
-        d = Delaunay(nodes)
+        nbl = np.array(nbl)[idx]
+        T   = np.array(T)[idx]
+        d   = np.array(d)[idx]
+
+        if (tet_only and len(nbl) != 4):
+            continue
+
+        d_min = np.min(d)
+        
+        # nodes defining the site polyhedron
+        nodes = cart[nbl] + np.dot(T, avec)
+
+        # compute volume as sum of the volumina of the 
+        # Delaunay tetrahedrons 
+        vertices = Delaunay(nodes).vertices
         V  = 0.0
-        for tet in d.vertices:
+        for tet in vertices:
             V += tetrahedron_volume(nodes[tet])
-        print("{:5d}  {:2s} {:2s} {:2d} {:6.2f}".format(
-            s+1, types[s], frame_species, len(nodes), V))
+
+        if tet_only:
+            H = tetrahedron_heights(nodes)
+            print("{:5d}  {:2s} {:2s} {:2d} {:8.4f} {:6.2f} {:8.4f}".format(
+                s+1, types[s], frame_species, len(nodes), d_min, V, H[0]))            
+        else:
+            print("{:5d}  {:2s} {:2s} {:2d} {:8.4f} {:6.2f}".format(
+                s+1, types[s], frame_species, len(nodes), d_min, V))
+
+        distances.append(d_min)
+        volumes.append(V)
+
+    if (len(volumes) > 0) and verbose:
+
+        V_av  = np.sum(volumes)/len(volumes)
+        V_max = np.max(volumes)
+        V_min = np.min(volumes)
+    
+        d_min_av  = np.sum(distances)/len(distances)
+        d_min_min = np.min(distances)
+
+        print("")
+        print(" average site volume: {:.2f} A^3".format(V_av))
+        print(" maximum site volume: {:.2f} A^3".format(V_max))
+        print(" minimum site volume: {:.2f} A^3".format(V_min))
+        print("")
+        print(" average minimal {}-{} distance: {:.3f} A".format(
+            site_species, frame_species, d_min_av))
+        print(" global minimal {}-{} distance : {:.3f} A".format(
+            site_species, frame_species, d_min_min))
+        print("")
 
     sys.stdout.flush()
 
@@ -217,10 +305,22 @@ if (__name__ == "__main__"):
         type    = str,
         default = "O")
 
+    parser.add_argument(
+        "--tetrahedrons", "-t",
+        help    = "Only analyse tetrahedral sites.",
+        action  = "store_true")
+
+    parser.add_argument(
+        "--verbose", "-v",
+        help    = "Print summary of the results.",
+        action  = "store_true")
+
     args = parser.parse_args()
 
     analyze_sites( infile        = args.input_file,
                    r_cut         = args.r_cut,
                    site_species  = args.site_species,
-                   frame_species = args.frame_species )
+                   frame_species = args.frame_species,
+                   tet_only      = args.tetrahedrons,
+                   verbose       = args.verbose )
 
