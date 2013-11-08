@@ -1,4 +1,4 @@
-""" Copyright (c) 2013 Alexander Urban 
+""" Copyright (c) 2013 Alexander Urban
 
  Permission is hereby granted, free of charge, to any person obtaining a
  copy of this software and associated documentation files (the
@@ -7,10 +7,10 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice shall be included
  in all copies or substantial portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -44,12 +44,12 @@ EPS   = 100.0*np.finfo(np.float).eps
 class Percolator(object):
     """
     The Percolator class implements a fast MC algorithm for percolation
-    analysis on regular lattices [1].  Several different methods allow 
+    analysis on regular lattices [1].  Several different methods allow
     the computation of various quantities related to percolation, such
     as the percolation susceptibility, the ratio of the largest cluster
     of sites to all occupied sites, the probability for wrapping
     (periodic) clusters vs. the site concentration, and the percolation
-    threshold.  
+    threshold.
 
     See the doc string of the individual methods for details:
 
@@ -58,11 +58,11 @@ class Percolator(object):
        percolating_bonds
        inaccessible_sites
        percolation_point
-    
+
     Apart from regular percolation analyses, special percolation rules
     can be specified using `set_special_percolation_rule()'.  This
     allows to modify the criteria of percolating bonds.
-    
+
     [1] Newman and Ziff, Phys. Rev. Lett. 85, 4104-4107 (2000).
     """
 
@@ -72,14 +72,14 @@ class Percolator(object):
           lattice  an instance of the Lattice class
         """
 
-        """                    static data 
+        """                    static data
 
         _special      True, if special percolation rules have been defined
-        _bonds[i][j]        True, if there is a bond between the j-th site 
+        _bonds[i][j]        True, if there is a bond between the j-th site
                             and its j-th neighbor
-        _nsurface           number of sites at cell boundary 
+        _nsurface           number of sites at cell boundary
                             (computed, if needed)
-        _T_vectors[i][j]    the translation vector belonging to 
+        _T_vectors[i][j]    the translation vector belonging to
                             _neighbors[i][j]
         _nbonds_tot         maximum number of possible bonds between the sites
         _cluster[i]     ID of cluster that site i belongs to; < 0, if
@@ -123,7 +123,7 @@ class Percolator(object):
           structure       an instance of pymatgen.core.structure.Structure
           all keyword arguments are passed to the Lattice class constructor
         """
-    
+
         avec    = structure.lattice.matrix
         coo     = structure.frac_coords
         lattice = Lattice(avec, coo, **kwargs)
@@ -141,13 +141,13 @@ class Percolator(object):
           structure       an instance of pymatgen.core.structure.Structure
           all keyword arguments of the main constructor
         """
-        
+
         lattice = Lattice(lattice_vectors, frac_coords)
         percol  = cls(lattice, **kwargs)
 
         return percol
 
-    def reset(self, init=False):
+    def reset(self, init=False, occupied=[]):
         """
         Reset the instance to the state of initialization.
         """
@@ -195,6 +195,10 @@ class Percolator(object):
 
         for i in range(self._nsites):
             self._bonds[i][:] = False
+
+        # initial occupations, if any:
+        for s in occupied:
+            self.add_percolating_site(site=s)
 
     def __str__(self):
         ostr  = "\n An instance of the Percolator class\n\n"
@@ -291,8 +295,8 @@ class Percolator(object):
                         uprint(" cluster with {} sites, ".format(len(cluster))
                                + "paths in (x,y,z): "
                                + "{} {} {}".format(*spanning))
-                
-        return float(nspanning)/float(self.num_occupied)
+
+        return nspanning
 
 
     def get_common_neighbors(self, site1, site2):
@@ -309,13 +313,13 @@ class Percolator(object):
         return common
 
         # Note, the above is slightly faster than simply:
-        # return list(set(self._neighbors[site1]) 
+        # return list(set(self._neighbors[site1])
         #             & set(self._neighbors[site2]))
 
 
     def set_special_percolation_rule(self, num_common=0, same=None, require_NN=False, dr=0.1):
         """
-        Define special criteria for a bond between two occupied sites 
+        Define special criteria for a bond between two occupied sites
         to be percolating.
 
         Arguments:
@@ -323,10 +327,10 @@ class Percolator(object):
                        that have to be occupied to form a percolating
                        bond between i and j.
           same         0, 1, or 2 --> require same x, y, or z coordinate
-                       for the bonding sites; e.g., same=2 will require 
+                       for the bonding sites; e.g., same=2 will require
                        both sites to be in the same z-layer
           require_NN   if True, the 'num_common' criterion additionally requires
-                       the common nearest neighbors themselves to be 
+                       the common nearest neighbors themselves to be
                        nearest neighbors (useful for diffusion on an fcc lattice)
           dr           required precision for two coordinates to be the 'same'
         """
@@ -341,7 +345,7 @@ class Percolator(object):
             """
             Check, if the special percolation rule is fulfilled
             between sites SITE1 and SITE2.
-            
+
             This instance defines a special rule.
             """
 
@@ -378,9 +382,9 @@ class Percolator(object):
                         if site2 in nb1:
                             num_NN +=1
                             if (num_NN >= num_common):
-                                NN_rule = True 
+                                NN_rule = True
                                 break
-                        
+
             percolating = (common_rule and same_rule and NN_rule)
             return percolating
 
@@ -403,7 +407,7 @@ class Percolator(object):
             stderr.write("Warning: all sites are already occupied\n")
             return
 
-        if not site:
+        if site is None:
             sel = np.random.random_integers(0,self.num_vacant-1)
             site = self._vacant[sel]
         else:
@@ -430,7 +434,7 @@ class Percolator(object):
             nb = self._neighbors[site][i]
             cl = self._cluster[nb]
             if (cl >= 0):
-                self._merge_clusters(cl, nb, self._cluster[site], 
+                self._merge_clusters(cl, nb, self._cluster[site],
                                      site, -self._T_vectors[site][i])
 
                 # update also next nearest neighbors
@@ -443,13 +447,12 @@ class Percolator(object):
                     nb2 = self._neighbors[nb][j]
                     cl2 = self._cluster[nb2]
                     if (cl2 >= 0):
-                        self._merge_clusters(cl2, nb2, self._cluster[nb], 
+                        self._merge_clusters(cl2, nb2, self._cluster[nb],
                                              nb, -self._T_vectors[nb][j])
-
 
     def calc_p_infinity(self, plist, samples=500, save_discrete=False):
         """
-        Calculate a Monte-Carlo estimate for the probability P_inf 
+        Calculate a Monte-Carlo estimate for the probability P_inf
         to find an infinitly extended cluster along with the percolation
         susceptibility Chi.
 
@@ -460,7 +463,7 @@ class Percolator(object):
                          values as well (file: discrete.dat)
 
         Returns:
-          tuple (P_inf, Chi), with lists of P_inf and Chi values 
+          tuple (P_inf, Chi), with lists of P_inf and Chi values
           that correspond to the desired probabilities in `plist'
         """
 
@@ -501,10 +504,11 @@ class Percolator(object):
         for i in xrange(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
             Xp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Xn)
-        
+
         return (Pp, Xp)
 
-    def calc_p_wrapping(self, plist, samples=500, save_discrete=False):
+    def calc_p_wrapping(self, plist, samples=500, save_discrete=False,
+                        initial_occupations=False):
         """
         Calculate a Monte-Carlo estimate for the probability P_wrap
         to find a wrapping cluster.
@@ -526,14 +530,21 @@ class Percolator(object):
 
         pb = ProgressBar(samples)
 
-        Pn = np.zeros(self._nsites)
-        Pnc = np.zeros(self._nsites)
+        # remember initial occupations, if desired
+        if initial_occupations:
+            occup0 = self._occupied[:]
+        else:
+            occup0 = []
+        nocc = len(occup0)
+
+        Pn = np.zeros(self._nsites-nocc)
+        Pnc = np.zeros(self._nsites-nocc)
         w  = 1.0/float(samples)
-        w2 = w*self._nsites
+        w2 = w*(self._nsites-nocc)
         for i in xrange(samples):
             pb()
-            self.reset()
-            for n in xrange(self._nsites):
+            self.reset(occupied=occup0)
+            for n in xrange(self._nsites-nocc):
                 self.add_percolating_site()
                 wrapping = np.sum(self._is_wrapping[self._largest])
                 if (wrapping > 0):
@@ -548,17 +559,17 @@ class Percolator(object):
             uprint("Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
                 for n in xrange(self._nsites):
-                    f.write("{} {}\n".format(n+1, Pn[n]))
+                    f.write("{} {}\n".format(n+1+nocc, Pn[n]))
 
         uprint(" Return convolution with a binomial distribution.\n")
 
-        nlist = np.arange(1, self._nsites+1, dtype=int)
+        nlist = np.arange(nocc+1, self._nsites+1, dtype=int)
         Pp = np.empty(len(plist))
         Ppc = np.empty(len(plist))
         for i in xrange(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
             Ppc[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pnc)
-        
+
         return (Pp, Ppc)
 
     def percolating_bonds(self, plist, samples=500, save_discrete=False):
@@ -604,7 +615,7 @@ class Percolator(object):
         Pp = np.empty(len(plist))
         for i in xrange(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
-        
+
         return Pp
 
     def inaccessible_sites(self, plist, samples=500, save_discrete=False):
@@ -656,7 +667,7 @@ class Percolator(object):
         for i in xrange(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
             Qp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Qn)
-        
+
         return (Pp, Qp)
 
     def percolation_flux(self, plist, samples=500, save_discrete=False):
@@ -705,12 +716,11 @@ class Percolator(object):
         Pp = np.empty(len(plist))
         for i in xrange(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
-        
+
         return Pp
 
-
-        
-    def percolation_point(self, samples=500, file_name=None):
+    def percolation_point(self, samples=500, file_name=None,
+                          initial_occupations=False):
         """
         Determine an estimate for the site percolation threshold p_c.
         """
@@ -719,6 +729,13 @@ class Percolator(object):
         uprint(" Averaging over {} samples:\n".format(samples))
 
         pb = ProgressBar(samples)
+
+        # remember initial occupations, if desired
+        if initial_occupations:
+            occup0 = self._occupied[:]
+        else:
+            occup0 = []
+        nocc = len(occup0)
 
         pc_site_any = 0.0
         pc_site_two = 0.0
@@ -742,20 +759,20 @@ class Percolator(object):
                     pc_bond_any += w2*float(self._nbonds)
                     done_any = True
                     if file_name:
-                        self.save_cluster(self._largest, 
+                        self.save_cluster(self._largest,
                              file_name=(file_name+("-1.%05d"%(i,))))
                 if (np.sum(np.where(wrapping>0,1,0))>=2) and not done_two:
                     pc_site_two += w1*float(n+1)
                     pc_bond_two += w2*float(self._nbonds)
                     done_two = True
                     if file_name:
-                        self.save_cluster(self._largest, 
+                        self.save_cluster(self._largest,
                              file_name=(file_name+("-2.%05d"%(i,))))
                 if np.all(wrapping>0):
                     pc_site_all += w1*float(n+1)
                     pc_bond_all += w2*float(self._nbonds)
                     if file_name:
-                        self.save_cluster(self._largest, 
+                        self.save_cluster(self._largest,
                              file_name=(file_name+("-3.%05d"%(i,))))
                     break
                 if n == self._nsites-1:
@@ -769,7 +786,7 @@ class Percolator(object):
                     sys.exit()
 
         pb()
-      
+
         return (pc_site_any, pc_site_two, pc_site_all,
                 pc_bond_any, pc_bond_two, pc_bond_all)
 
@@ -845,7 +862,7 @@ class Percolator(object):
         """
 
         nsurf = 0
-        
+
         dr2 = 2.0*dr
 
         # first lattice direction
@@ -884,7 +901,7 @@ class Percolator(object):
 
         if not self._check_special(site1, site2):
             return
-        
+
         # remember bonds
         nb1 = self._neighbors[site1].index(site2)
         if not self._bonds[site1][nb1]:
@@ -896,10 +913,10 @@ class Percolator(object):
         # vector from head node of cluster2 to head of cluster1
         v_12 = (self._coo[site2] + T2) - self._coo[site1]
         vec  = self._vec[site1] - v_12 - self._vec[site2]
-        
+
         if (cluster1 == cluster2):
             # if `vec' is different from the stored vector, we have
-            # a wrapping cluster, i.e. we found the periodic image of 
+            # a wrapping cluster, i.e. we found the periodic image of
             # a site that is already part of the cluster
             wrapping1 = np.sum(self._is_wrapping[cluster1])
             if abs(vec[0]) > 0.5:
@@ -936,7 +953,7 @@ class Percolator(object):
             self._vec[i,:] += vec
             self._cluster[i] = cluster1
 
-        # insert second cluster right after the head node in 
+        # insert second cluster right after the head node in
         # cluster 1
         j = self._first[cluster1]
         self._next[i] = self._next[j]
@@ -976,4 +993,3 @@ class Percolator(object):
         # set_special_percolation_rule().
 
         return True
-

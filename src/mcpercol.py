@@ -10,7 +10,6 @@ __author__ = "Alexander Urban"
 __date__   = "2013-02-20"
 
 import argparse
-import sys
 import numpy as np
 
 from pymatgen.io.vaspio import Poscar
@@ -25,8 +24,8 @@ EPS   = 100.0*np.finfo(np.float).eps
 
 #----------------------------------------------------------------------#
 
-def runmc(infile, T=300.0, J1=0.5e-3, J2=0.5e-3, H=0.0, Nequi=100, 
-          NMC=500, Nstruc=250, supercell=(1,1,1), common=None, 
+def runmc(infile, T=300.0, J1=0.5e-3, J2=0.5e-3, H=0.0, Nequi=100,
+          NMC=500, Nstruc=250, supercell=(1,1,1), common=None,
           conc=None, nocc=None, opt=False, lgh=False, mVT=False):
 
     outfile = "mcpercol.out"
@@ -44,7 +43,7 @@ def runmc(infile, T=300.0, J1=0.5e-3, J2=0.5e-3, H=0.0, Nequi=100,
         lattice.random_decoration(p=conc)
     elif nocc:
         uprint(" Random site occupations. N = {}".format(nocc))
-        lattice.random_decoration(N=nocc)       
+        lattice.random_decoration(N=nocc)
     else:
         uprint(" Initial site occupations taken from structure file.")
     uprint(lattice)
@@ -131,7 +130,7 @@ def runmc(infile, T=300.0, J1=0.5e-3, J2=0.5e-3, H=0.0, Nequi=100,
         if (NMC > 0):
             uprint(" now sampling {} structures ".format(Nstruc)
                    + "out of {} MC steps".format(NMC))
-            
+
             nsamp = 0    # number of sampled structures
             nwrap = 0.0  # sum of fractions of percolating sites
             nperc = 0    # number of percolating structures
@@ -154,14 +153,14 @@ def runmc(infile, T=300.0, J1=0.5e-3, J2=0.5e-3, H=0.0, Nequi=100,
 
             p_percol = float(nperc)/float(nsamp)
             f_percol = float(nwrap)/float(nsamp)
-            
+
             uprint(" percolation probability (fraction): {} ({})".format(
                 p_percol, f_percol))
 
         E_tot = ising.total_energy()
         if (abs(E-E_tot)>1.0e-6):
             uprint("Error: final energy inconsistent - check MC code!")
-        
+
         uprint("  E_tot         T             J1            "
                + "J2            H             J1/kT         p"
                + "              p_percol      f_percol")
@@ -169,7 +168,7 @@ def runmc(infile, T=300.0, J1=0.5e-3, J2=0.5e-3, H=0.0, Nequi=100,
                + "{:.6e}  {:.6e}  {:.6f}  {:.6f}  {:.6f}\n".format(
                  H, J1*kT_inv, float(lattice.num_occupied)/float(lattice.num_sites),
                  p_percol, f_percol))
-                
+
     uprint(" Saving final structure to file 'CONTCAR'.")
     lattice.save_structure('CONTCAR')
 
@@ -185,7 +184,7 @@ if (__name__ == "__main__"):
 
     parser.add_argument(
         "structure",
-        help    = "structure in VASP's extended POSCAR format", 
+        help    = "structure in VASP's extended POSCAR format",
         default = "POSCAR",
         nargs   = "?")
 
@@ -239,24 +238,24 @@ if (__name__ == "__main__"):
         default = 0.3e-2)
 
     parser.add_argument(
-        "-H", "--mu", 
+        "-H", "--mu",
         help    = "Magnetic field term (point interaction).",
         type    = float,
         default = 0.0,
         dest    = "H")
 
     parser.add_argument(
-        "--opt", 
+        "--opt",
         help    = "Only optimize structure (search ground state).",
         action  = "store_true")
 
     parser.add_argument(
-        "--LGH", 
+        "--LGH",
         help    = "Initialize as Lattice gas Hamiltonian (v1, v2, mu).",
         action  = "store_true")
 
     parser.add_argument(
-        "--mVT", 
+        "--mVT",
         help    = "Micro-canonical ensemble (variable particle number).",
         action  = "store_true")
 

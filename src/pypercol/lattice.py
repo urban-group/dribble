@@ -18,7 +18,7 @@ from pynblist    import NeighborList
 class Lattice(object):
 
     def __init__(self, lattice_vectors, frac_coords, decoration=None, 
-                 supercell=(1,1,1)):
+                 supercell=(1,1,1), NN_range=None):
         """
         Arguments:
           lattice_vectors    3x3 matrix with lattice vectors in rows
@@ -94,7 +94,7 @@ class Lattice(object):
         self._N_nnn    = 0
         self._nsurface = 0
 
-        self._build_neighbor_list()
+        self._build_neighbor_list(r_NN=NN_range)
 
     @classmethod
     def from_structure(cls, structure, species="O", **kwargs):
@@ -134,6 +134,9 @@ class Lattice(object):
         ostr += "\n occupied sites        : {}".format(self.num_occupied)
         if type(self._N_nn) == int:
             ostr += "\n number of NNs         : {}".format(self._N_nn)
+        else:
+            ostr += "\n average number of NNs : {}".format(
+                np.sum(self._N_nn)/float(len(self._N_nn)))
         ostr += "\n"
         ostr += str(self._nblist)
         return ostr
@@ -271,7 +274,7 @@ class Lattice(object):
     #                         private methods                          #
     #------------------------------------------------------------------#
 
-    def _build_neighbor_list(self, dr=0.1):
+    def _build_neighbor_list(self, r_NN=None, dr=0.1):
         """
         Determine the list of neighboring sites for 
         each site of the lattice.  Allow the next neighbor
@@ -283,10 +286,14 @@ class Lattice(object):
         nbs    = range(self._nsites)
         Tvecs  = range(self._nsites)
 
-        nblist = NeighborList(self._coo, lattice_vectors=self._avec)
+        nblist = NeighborList(self._coo, lattice_vectors=self._avec, 
+                              interaction_range=r_NN, tolerance=dr)
         
         for i in xrange(self._nsites):
-            (nbl, dist, T) = nblist.get_nearest_neighbors(i, dr=dr)
+            if r_NN:
+                (nbl, dist, T) = nblist.get_neighbors_and_distances(i, dr=dr)
+            else:
+                (nbl, dist, T) = nblist.get_nearest_neighbors(i, dr=dr)
             nbs[i]   = nbl
             Tvecs[i] = T
             dNN[i]   = np.min(dist)

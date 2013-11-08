@@ -18,10 +18,11 @@ from pypercol.aux import uprint
 
 #----------------------------------------------------------------------#
 
-def percol(poscarfile, samples, save_clusters=False, 
-           file_name="percol.out", pc=False, check=False, pinf=False, 
-           pwrap=False, bonds=False, flux=False, inaccessible=False, 
-           supercell=[1,1,1], common=0, same=None, require_NN=False):
+def percol(poscarfile, samples, save_clusters=False,
+           file_name="percol.out", pc=False, check=False, r_NN=None,
+           pinf=False, pwrap=False, bonds=False, flux=False,
+           inaccessible=False, supercell=[1,1,1], common=0, same=None,
+           require_NN=False):
 
     if not (check or pc or pinf or pwrap or bonds or flux or inaccessible):
         print("\n Nothing to do.")
@@ -34,7 +35,7 @@ def percol(poscarfile, samples, save_clusters=False,
     uprint(" done.")
 
     uprint("\n Setting up lattice and neighbor lists...", end="")
-    lattice = Lattice.from_structure(struc, supercell=supercell)
+    lattice = Lattice.from_structure(struc, supercell=supercell, NN_range=r_NN)
     uprint(" done.")
     uprint(" Initial site occupations taken from structure file.")
     print(lattice)
@@ -60,12 +61,16 @@ def percol(poscarfile, samples, save_clusters=False,
         #          check, if initial structure is percolating          #
         #--------------------------------------------------------------#
 
-        nspan = percolator.check_spanning(verbose=True)
-        
+        noccup = percolator.num_occupied
+        nspan  = percolator.check_spanning(verbose=True)
+
         if (nspan > 0):
             uprint(" The initial structure is percolating.\n")
+            uprint(" Fraction of accessible sites: {}\n".format(
+                float(nspan)/float(noccup)))
         else:
             uprint(" The initial structure is NOT percolating.\n")
+            uprint(" Fraction of accessible sites: 0.0\n")
 
     if pc:
 
@@ -78,7 +83,7 @@ def percol(poscarfile, samples, save_clusters=False,
              pc_bond_any, pc_bond_two, pc_bond_all,
             ) = percolator.percolation_point(
                 samples=samples, file_name=file_name+".vasp")
-        else: 
+        else:
             (pc_site_any, pc_site_two, pc_site_all,
              pc_bond_any, pc_bond_two, pc_bond_all,
            ) = percolator.percolation_point(samples=samples)
@@ -134,7 +139,7 @@ def percol(poscarfile, samples, save_clusters=False,
             for p in xrange(len(plist)):
                 f.write("  {:10.8f}   {:10.8f}   {:10.8f}\n".format(
                     plist[p], Q[p], Qc[p]))
-        
+
     if bonds:
 
         #--------------------------------------------------------------#
@@ -206,17 +211,23 @@ if (__name__ == "__main__"):
 
     parser.add_argument(
         "structure",
-        help    = "structure in VASP's extended POSCAR format", 
+        help    = "structure in VASP's extended POSCAR format",
         default = "POSCAR",
         nargs   = "?")
 
     parser.add_argument(
         "--supercell",
         help    = "List of multiples of the lattice cell" +
-                  " in the three spacial directions",
+                  " in the three lattice directions",
         type    = int,
         default = (1,1,1),
         nargs   = "+")
+
+    parser.add_argument(
+        "--NN-range",
+        help    = "longest expected distance in 1st NN shell.",
+        type    = float,
+        default = None)
 
     parser.add_argument(
         "--bonds", "-b",
@@ -239,7 +250,7 @@ if (__name__ == "__main__"):
         action  = "store_true")
 
     parser.add_argument(
-        "--check", 
+        "--check",
         help    = "Check, if the initial structure is percolating.",
         action  = "store_true")
 
@@ -298,12 +309,13 @@ if (__name__ == "__main__"):
     if args.debug:
         np.random.seed(seed=1)
 
-    percol( poscarfile    = args.structure, 
+    percol( poscarfile    = args.structure,
             samples       = args.samples,
             save_clusters = args.save_clusters,
             file_name     = args.file_name,
             pc            = args.pc,
             check         = args.check,
+            r_NN          = args.NN_range,
             pinf          = args.pinf,
             pwrap         = args.pwrap,
             bonds         = args.bonds,
@@ -313,6 +325,3 @@ if (__name__ == "__main__"):
             common        = args.common,
             same          = args.same,
             require_NN    = args.require_NN)
-
-
-
