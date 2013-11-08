@@ -18,11 +18,11 @@ from pypercol.aux import uprint
 
 #----------------------------------------------------------------------#
 
-def percol(poscarfile, samples, save_clusters=False,
+def percol(poscarfile, samples, save_clusters=False, save_raw=False,
            file_name="percol.out", pc=False, check=False, r_NN=None,
            pinf=False, pwrap=False, bonds=False, flux=False,
            inaccessible=False, supercell=[1,1,1], common=0, same=None,
-           require_NN=False):
+           require_NN=False, occupations=False):
 
     if not (check or pc or pinf or pwrap or bonds or flux or inaccessible):
         print("\n Nothing to do.")
@@ -38,6 +38,8 @@ def percol(poscarfile, samples, save_clusters=False,
     lattice = Lattice.from_structure(struc, supercell=supercell, NN_range=r_NN)
     uprint(" done.")
     uprint(" Initial site occupations taken from structure file.")
+    if occupations:
+        uprint(" These occupations will be used, but in random order.")
     print(lattice)
 
     uprint(" Initializing percolator...", end="")
@@ -82,11 +84,15 @@ def percol(poscarfile, samples, save_clusters=False,
             (pc_site_any, pc_site_two, pc_site_all,
              pc_bond_any, pc_bond_two, pc_bond_all,
             ) = percolator.percolation_point(
-                samples=samples, file_name=file_name+".vasp")
+                samples=samples,
+                file_name=file_name+".vasp",
+                initial_occupations=occupations)
         else:
             (pc_site_any, pc_site_two, pc_site_all,
              pc_bond_any, pc_bond_two, pc_bond_all,
-           ) = percolator.percolation_point(samples=samples)
+           ) = percolator.percolation_point(
+                samples=samples,
+                initial_occupations=occupations)
 
         uprint(" Critical site (bond) concentrations to find a wrapping cluster\n")
 
@@ -106,7 +112,10 @@ def percol(poscarfile, samples, save_clusters=False,
         #--------------------------------------------------------------#
 
         plist = np.arange(0.01, 1.00, 0.01)
-        (Q, X) = percolator.calc_p_infinity(plist, samples=samples)
+        (Q, X) = percolator.calc_p_infinity(
+            plist, samples=samples,
+            save_discrete=save_raw,
+            initial_occupations=occupations)
 
         # integrate susceptibility X in order to normalize it
         intX = np.sum(X)*(plist[1]-plist[0])
@@ -128,7 +137,10 @@ def percol(poscarfile, samples, save_clusters=False,
         #--------------------------------------------------------------#
 
         plist = np.arange(0.01, 1.00, 0.01)
-        (Q, Qc) = percolator.calc_p_wrapping(plist, samples=samples)
+        (Q, Qc) = percolator.calc_p_wrapping(
+            plist, samples=samples,
+            save_discrete=save_raw,
+            initial_occupations=occupations)
 
         fname = file_name + ".wrap"
         uprint(" Writing results to: {}\n".format(fname))
@@ -147,7 +159,10 @@ def percol(poscarfile, samples, save_clusters=False,
         #--------------------------------------------------------------#
 
         plist = np.arange(0.01, 1.00, 0.01)
-        F_bonds = percolator.percolating_bonds(plist, samples=samples)
+        F_bonds = percolator.percolating_bonds(
+            plist, samples=samples,
+            save_discrete=save_raw,
+            initial_occupations=occupations)
 
         fname = file_name + ".bonds"
         uprint(" Writing results to: {}\n".format(fname))
@@ -166,7 +181,10 @@ def percol(poscarfile, samples, save_clusters=False,
         #--------------------------------------------------------------#
 
         plist = np.arange(0.01, 1.00, 0.01)
-        flux = percolator.percolation_flux(plist, samples=samples)
+        flux = percolator.percolation_flux(
+            plist, samples=samples,
+            save_discrete=save_raw,
+            initial_occupations=occupations)
 
         fname = file_name + ".flux"
         uprint(" Writing results to: {}\n".format(fname))
@@ -185,7 +203,10 @@ def percol(poscarfile, samples, save_clusters=False,
         #--------------------------------------------------------------#
 
         plist = np.arange(0.01, 1.00, 0.01)
-        (F_inacc, nclus) = percolator.inaccessible_sites(plist, samples=samples)
+        (F_inacc, nclus) = percolator.inaccessible_sites(
+            plist, samples=samples,
+            save_discrete=save_raw,
+            initial_occupations=occupations)
 
         fname = file_name + ".inacc"
         uprint(" Writing results to: {}\n".format(fname))
@@ -290,6 +311,11 @@ if (__name__ == "__main__"):
         dest    = "require_NN")
 
     parser.add_argument(
+        "--use-occupations",
+        help    = "Use the (randomized) occupations of the initial structure.",
+        action  = "store_true")
+
+    parser.add_argument(
         "--file-name",
         help    = "base file name for all output files",
         default = "percol")
@@ -297,6 +323,11 @@ if (__name__ == "__main__"):
     parser.add_argument(
         "--save-clusters",
         help    = "save wrapping clusters to file",
+        action  = "store_true")
+
+    parser.add_argument(
+        "--save-raw",
+        help    = "Also store raw data before convolution (where available).",
         action  = "store_true")
 
     parser.add_argument(
@@ -312,6 +343,7 @@ if (__name__ == "__main__"):
     percol( poscarfile    = args.structure,
             samples       = args.samples,
             save_clusters = args.save_clusters,
+            save_raw      = args.save_raw,
             file_name     = args.file_name,
             pc            = args.pc,
             check         = args.check,
@@ -324,4 +356,5 @@ if (__name__ == "__main__"):
             supercell     = args.supercell,
             common        = args.common,
             same          = args.same,
-            require_NN    = args.require_NN)
+            require_NN    = args.require_NN,
+            occupations   = args.use_occupations)
