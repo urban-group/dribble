@@ -450,7 +450,8 @@ class Percolator(object):
                         self._merge_clusters(cl2, nb2, self._cluster[nb],
                                              nb, -self._T_vectors[nb][j])
 
-    def calc_p_infinity(self, plist, samples=500, save_discrete=False):
+    def calc_p_infinity(self, plist, samples=500, save_discrete=False,
+                        initial_occupations=False):
         """
         Calculate a Monte-Carlo estimate for the probability P_inf
         to find an infinitly extended cluster along with the percolation
@@ -472,6 +473,13 @@ class Percolator(object):
 
         pb = ProgressBar(samples)
 
+        # remember initial occupations, if desired
+        if initial_occupations:
+            occup0 = self._occupied[:]
+        else:
+            occup0 = []
+        nocc = len(occup0)
+
         Pn = np.zeros(self._nsites)
         Xn = np.zeros(self._nsites)
         w  = 1.0/float(samples)
@@ -479,8 +487,12 @@ class Percolator(object):
         for i in xrange(samples):
             pb()
             self.reset()
+            np.random.shuffle(occup0)
             for n in xrange(self._nsites):
-                self.add_percolating_site()
+                if n < nocc:
+                    self.add_percolating_site(site=occup0[n])
+                else:
+                    self.add_percolating_site()
                 Pn[n] += w*(float(self._size[self._largest])/float(n+1))
                 for cl in xrange(len(self._size)):
                     if cl == self._largest:
@@ -537,15 +549,19 @@ class Percolator(object):
             occup0 = []
         nocc = len(occup0)
 
-        Pn = np.zeros(self._nsites-nocc)
-        Pnc = np.zeros(self._nsites-nocc)
+        Pn = np.zeros(self._nsites)
+        Pnc = np.zeros(self._nsites)
         w  = 1.0/float(samples)
-        w2 = w*(self._nsites-nocc)
+        w2 = w*(self._nsites)
         for i in xrange(samples):
             pb()
-            self.reset(occupied=occup0)
-            for n in xrange(self._nsites-nocc):
-                self.add_percolating_site()
+            self.reset()
+            np.random.shuffle(occup0)
+            for n in xrange(self._nsites):
+                if n < nocc:
+                    self.add_percolating_site(site=occup0[n])
+                else:
+                    self.add_percolating_site()
                 wrapping = np.sum(self._is_wrapping[self._largest])
                 if (wrapping > 0):
                     Pnc[n:] += w
@@ -559,11 +575,11 @@ class Percolator(object):
             uprint("Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
                 for n in xrange(self._nsites):
-                    f.write("{} {}\n".format(n+1+nocc, Pn[n]))
+                    f.write("{} {}\n".format(n+1, Pn[n]))
 
         uprint(" Return convolution with a binomial distribution.\n")
 
-        nlist = np.arange(nocc+1, self._nsites+1, dtype=int)
+        nlist = np.arange(1, self._nsites+1, dtype=int)
         Pp = np.empty(len(plist))
         Ppc = np.empty(len(plist))
         for i in xrange(len(plist)):
@@ -572,7 +588,8 @@ class Percolator(object):
 
         return (Pp, Ppc)
 
-    def percolating_bonds(self, plist, samples=500, save_discrete=False):
+    def percolating_bonds(self, plist, samples=500, save_discrete=False,
+                          initial_occupations=False):
         """
         Estimate number of percolating bonds in dependence of site
         concentration.
@@ -592,13 +609,24 @@ class Percolator(object):
 
         pb = ProgressBar(samples)
 
+        # remember initial occupations, if desired
+        if initial_occupations:
+            occup0 = self._occupied[:]
+        else:
+            occup0 = []
+        nocc = len(occup0)
+
         Pn = np.zeros(self._nsites)
         w  = 1.0/float(samples)/float(self._nbonds_tot)
         for i in xrange(samples):
             pb()
             self.reset()
+            np.random.shuffle(occup0)
             for n in xrange(self._nsites):
-                self.add_percolating_site()
+                if n < nocc:
+                    self.add_percolating_site(site=occup0[n])
+                else:
+                    self.add_percolating_site()
                 Pn[n]   += w*float(self._nbonds)
         pb()
 
@@ -618,7 +646,8 @@ class Percolator(object):
 
         return Pp
 
-    def inaccessible_sites(self, plist, samples=500, save_discrete=False):
+    def inaccessible_sites(self, plist, samples=500, save_discrete=False,
+                           initial_occupations=False):
         """
         Estimate the number of inaccessible sites, i.e. sites that are
         not part of a percolating cluster, for a given range of
@@ -639,14 +668,25 @@ class Percolator(object):
 
         pb = ProgressBar(samples)
 
+        # remember initial occupations, if desired
+        if initial_occupations:
+            occup0 = self._occupied[:]
+        else:
+            occup0 = []
+        nocc = len(occup0)
+
         Pn = np.zeros(self._nsites)
         Qn = np.zeros(self._nsites)
         w  = 1.0/float(samples)
         for i in xrange(samples):
             pb()
             self.reset()
+            np.random.shuffle(occup0)
             for n in xrange(self._nsites):
-                self.add_percolating_site()
+                if n < nocc:
+                    self.add_percolating_site(site=occup0[n])
+                else:
+                    self.add_percolating_site()
                 Pn[n] += w*float(n+1-self._npercolating)/float(n+1)
                 Qn[n] += w*float(self._nclus_percol)/float(self._nclusters)
 
@@ -670,7 +710,8 @@ class Percolator(object):
 
         return (Pp, Qp)
 
-    def percolation_flux(self, plist, samples=500, save_discrete=False):
+    def percolation_flux(self, plist, samples=500, save_discrete=False,
+                           initial_occupations=False):
         """
         Estimate the ratio of percolation pathes over all possible
         cell boundary sites.
@@ -692,13 +733,24 @@ class Percolator(object):
 
         pb = ProgressBar(samples)
 
+        # remember initial occupations, if desired
+        if initial_occupations:
+            occup0 = self._occupied[:]
+        else:
+            occup0 = []
+        nocc = len(occup0)
+
         Pn = np.zeros(self._nsites)
         w  = 1.0/float(samples)/A
         for i in xrange(samples):
             pb()
             self.reset()
+            np.random.shuffle(occup0)
             for n in xrange(self._nsites):
-                self.add_percolating_site()
+                if n < nocc:
+                    self.add_percolating_site(site=occup0[n])
+                else:
+                    self.add_percolating_site()
                 Pn[n] += w*self._npaths
 
         pb()
@@ -750,9 +802,13 @@ class Percolator(object):
         for i in xrange(samples):
             pb()
             self.reset()
+            np.random.shuffle(occup0)
             done_any = done_two = False
             for n in xrange(self._nsites):
-                self.add_percolating_site()
+                if n < nocc:
+                    self.add_percolating_site(site=occup0[n])
+                else:
+                    self.add_percolating_site()
                 wrapping = self._is_wrapping[self._largest]
                 if (np.sum(wrapping) > 0) and not done_any:
                     pc_site_any += w1*float(n+1)
