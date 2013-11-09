@@ -503,7 +503,7 @@ class Percolator(object):
 
         if save_discrete:
             fname = 'discrete.dat'
-            uprint("Saving discrete data to file: {}".format(fname))
+            uprint(" Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
                 for n in xrange(self._nsites):
                     f.write("{} {} {}\n".format(n+1, Pn[n], Xn[n]))
@@ -516,6 +516,9 @@ class Percolator(object):
         for i in xrange(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
             Xp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Xn)
+
+        # reset occupations (if saved):
+        self.reset(occupied=occup0)
 
         return (Pp, Xp)
 
@@ -572,7 +575,7 @@ class Percolator(object):
 
         if save_discrete:
             fname = 'discrete-wrap.dat'
-            uprint("Saving discrete data to file: {}".format(fname))
+            uprint(" Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
                 for n in xrange(self._nsites):
                     f.write("{} {}\n".format(n+1, Pn[n]))
@@ -585,6 +588,9 @@ class Percolator(object):
         for i in xrange(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
             Ppc[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pnc)
+
+        # reset occupations (if saved):
+        self.reset(occupied=occup0)
 
         return (Pp, Ppc)
 
@@ -632,7 +638,7 @@ class Percolator(object):
 
         if save_discrete:
             fname = 'discrete-bonds.dat'
-            uprint("Saving discrete data to file: {}".format(fname))
+            uprint(" Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
                 for n in xrange(self._nsites):
                     f.write("{} {}\n".format(n+1, Pn[n]))
@@ -643,6 +649,9 @@ class Percolator(object):
         Pp = np.empty(len(plist))
         for i in xrange(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
+
+        # reset occupations (if saved):
+        self.reset(occupied=occup0)
 
         return Pp
 
@@ -694,7 +703,7 @@ class Percolator(object):
 
         if save_discrete:
             fname = 'discrete-inaccessible.dat'
-            uprint("Saving discrete data to file: {}".format(fname))
+            uprint(" Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
                 for n in xrange(self._nsites):
                     f.write("{} {} {}\n".format(n+1, Pn[n], Qn[n]))
@@ -707,6 +716,9 @@ class Percolator(object):
         for i in xrange(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
             Qp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Qn)
+
+        # reset occupations (if saved):
+        self.reset(occupied=occup0)
 
         return (Pp, Qp)
 
@@ -757,7 +769,7 @@ class Percolator(object):
 
         if save_discrete:
             fname = 'discrete-flux.dat'
-            uprint("Saving discrete data to file: {}".format(fname))
+            uprint(" Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
                 for n in xrange(self._nsites):
                     f.write("{} {}\n".format(n+1, Pn[n]))
@@ -768,6 +780,9 @@ class Percolator(object):
         Pp = np.empty(len(plist))
         for i in xrange(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
+
+        # reset occupations (if saved):
+        self.reset(occupied=occup0)
 
         return Pp
 
@@ -842,6 +857,9 @@ class Percolator(object):
                     sys.exit()
 
         pb()
+
+        # reset occupations (if saved):
+        self.reset(occupied=occup0)
 
         return (pc_site_any, pc_site_two, pc_site_all,
                 pc_bond_any, pc_bond_two, pc_bond_all)
