@@ -22,7 +22,7 @@ def percol(poscarfile, samples, save_clusters=False, save_raw=False,
            file_name="percol.out", pc=False, check=False, r_NN=None,
            pinf=False, pwrap=False, bonds=False, flux=False,
            inaccessible=False, supercell=[1,1,1], common=0, same=None,
-           require_NN=False, occupations=False):
+           require_NN=False, occupations=False, mix=None):
 
     if not (check or pc or pinf or pwrap or bonds or flux or inaccessible):
         print("\n Nothing to do.")
@@ -40,6 +40,8 @@ def percol(poscarfile, samples, save_clusters=False, save_raw=False,
     uprint(" Initial site occupations taken from structure file.")
     if occupations:
         uprint(" These occupations will be used, but in random order.")
+    if mix is not None:
+        uprint(" Degree of inter-site mixing: {}".format(mix))
     print(lattice)
 
     uprint(" Initializing percolator...", end="")
@@ -86,13 +88,15 @@ def percol(poscarfile, samples, save_clusters=False, save_raw=False,
             ) = percolator.percolation_point(
                 samples=samples,
                 file_name=file_name+".vasp",
-                initial_occupations=occupations)
+                initial_occupations=occupations,
+                mix=mix)
         else:
             (pc_site_any, pc_site_two, pc_site_all,
              pc_bond_any, pc_bond_two, pc_bond_all,
            ) = percolator.percolation_point(
                 samples=samples,
-                initial_occupations=occupations)
+                initial_occupations=occupations,
+                mix=mix)
 
         uprint(" Critical site (bond) concentrations to find a wrapping cluster\n")
 
@@ -115,7 +119,8 @@ def percol(poscarfile, samples, save_clusters=False, save_raw=False,
         (Q, X) = percolator.calc_p_infinity(
             plist, samples=samples,
             save_discrete=save_raw,
-            initial_occupations=occupations)
+            initial_occupations=occupations,
+            mix=mix)
 
         # integrate susceptibility X in order to normalize it
         intX = np.sum(X)*(plist[1]-plist[0])
@@ -140,7 +145,8 @@ def percol(poscarfile, samples, save_clusters=False, save_raw=False,
         (Q, Qc) = percolator.calc_p_wrapping(
             plist, samples=samples,
             save_discrete=save_raw,
-            initial_occupations=occupations)
+            initial_occupations=occupations,
+            mix=mix)
 
         fname = file_name + ".wrap"
         uprint(" Writing results to: {}\n".format(fname))
@@ -162,7 +168,8 @@ def percol(poscarfile, samples, save_clusters=False, save_raw=False,
         F_bonds = percolator.percolating_bonds(
             plist, samples=samples,
             save_discrete=save_raw,
-            initial_occupations=occupations)
+            initial_occupations=occupations,
+            mix=mix)
 
         fname = file_name + ".bonds"
         uprint(" Writing results to: {}\n".format(fname))
@@ -184,7 +191,8 @@ def percol(poscarfile, samples, save_clusters=False, save_raw=False,
         flux = percolator.percolation_flux(
             plist, samples=samples,
             save_discrete=save_raw,
-            initial_occupations=occupations)
+            initial_occupations=occupations,
+            mix=mix)
 
         fname = file_name + ".flux"
         uprint(" Writing results to: {}\n".format(fname))
@@ -206,7 +214,8 @@ def percol(poscarfile, samples, save_clusters=False, save_raw=False,
         (F_inacc, nclus) = percolator.inaccessible_sites(
             plist, samples=samples,
             save_discrete=save_raw,
-            initial_occupations=occupations)
+            initial_occupations=occupations,
+            mix=mix)
 
         fname = file_name + ".inacc"
         uprint(" Writing results to: {}\n".format(fname))
@@ -316,6 +325,12 @@ if (__name__ == "__main__"):
         action  = "store_true")
 
     parser.add_argument(
+        "--mix",
+        help    = "Degree of site (e.g., cation) mixing (default: 0.0)",
+        type    = float,
+        default = None)
+
+    parser.add_argument(
         "--file-name",
         help    = "base file name for all output files",
         default = "percol")
@@ -357,4 +372,5 @@ if (__name__ == "__main__"):
             common        = args.common,
             same          = args.same,
             require_NN    = args.require_NN,
-            occupations   = args.use_occupations)
+            occupations   = args.use_occupations,
+            mix           = args.mix)

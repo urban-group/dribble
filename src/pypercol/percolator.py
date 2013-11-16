@@ -451,7 +451,7 @@ class Percolator(object):
                                              nb, -self._T_vectors[nb][j])
 
     def calc_p_infinity(self, plist, samples=500, save_discrete=False,
-                        initial_occupations=False):
+                        initial_occupations=False, mix=None):
         """
         Calculate a Monte-Carlo estimate for the probability P_inf
         to find an infinitly extended cluster along with the percolation
@@ -462,6 +462,14 @@ class Percolator(object):
           samples        number of samples to average the MC result over
           save_discrete  if True, save the discrete, supercell dependent
                          values as well (file: discrete.dat)
+          initial_occupations
+                         if True, the initial site occupations will be
+                         (in random order) occupied first
+          mix            only meaningful in conjunction with
+                         initial_occupations=True;
+                         if 0.0 < mix < 1.0, a fraction of 'mix' of the
+                         initially occupied sites will be replaced by
+                         unoccupied ones (e.g., to simulate cation mixing)
 
         Returns:
           tuple (P_inf, Chi), with lists of P_inf and Chi values
@@ -487,10 +495,10 @@ class Percolator(object):
         for i in xrange(samples):
             pb()
             self.reset()
-            np.random.shuffle(occup0)
+            occup = self._mix_and_shuffle(occup0, mix)
             for n in xrange(self._nsites):
                 if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
+                    self.add_percolating_site(site=occup[n])
                 else:
                     self.add_percolating_site()
                 Pn[n] += w*(float(self._size[self._largest])/float(n+1))
@@ -523,7 +531,7 @@ class Percolator(object):
         return (Pp, Xp)
 
     def calc_p_wrapping(self, plist, samples=500, save_discrete=False,
-                        initial_occupations=False):
+                        initial_occupations=False, mix=None):
         """
         Calculate a Monte-Carlo estimate for the probability P_wrap
         to find a wrapping cluster.
@@ -533,6 +541,14 @@ class Percolator(object):
           samples        number of samples to average the MC result over
           save_discrete  if True, save the discrete, supercell dependent
                          values as well (file: discrete-wrap.dat)
+          initial_occupations
+                         if True, the initial site occupations will be
+                         (in random order) occupied first
+          mix            only meaningful in conjunction with
+                         initial_occupations=True;
+                         if 0.0 < mix < 1.0, a fraction of 'mix' of the
+                         initially occupied sites will be replaced by
+                         unoccupied ones (e.g., to simulate cation mixing)
 
         Returns:
           tuple (P_wrap, P_wrap_c)
@@ -559,10 +575,10 @@ class Percolator(object):
         for i in xrange(samples):
             pb()
             self.reset()
-            np.random.shuffle(occup0)
+            occup = self._mix_and_shuffle(occup0, mix)
             for n in xrange(self._nsites):
                 if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
+                    self.add_percolating_site(site=occup[n])
                 else:
                     self.add_percolating_site()
                 wrapping = np.sum(self._is_wrapping[self._largest])
@@ -595,7 +611,7 @@ class Percolator(object):
         return (Pp, Ppc)
 
     def percolating_bonds(self, plist, samples=500, save_discrete=False,
-                          initial_occupations=False):
+                          initial_occupations=False, mix=None):
         """
         Estimate number of percolating bonds in dependence of site
         concentration.
@@ -605,6 +621,14 @@ class Percolator(object):
           samples        number of samples to average the MC result over
           save_discrete  if True, save the discrete, supercell dependent
                          values as well (file: discrete-wrap.dat)
+          initial_occupations
+                         if True, the initial site occupations will be
+                         (in random order) occupied first
+          mix            only meaningful in conjunction with
+                         initial_occupations=True;
+                         if 0.0 < mix < 1.0, a fraction of 'mix' of the
+                         initially occupied sites will be replaced by
+                         unoccupied ones (e.g., to simulate cation mixing)
 
         Returns:
           list of fractions of all bonds for certain concentration
@@ -627,10 +651,10 @@ class Percolator(object):
         for i in xrange(samples):
             pb()
             self.reset()
-            np.random.shuffle(occup0)
+            occup = self._mix_and_shuffle(occup0, mix)
             for n in xrange(self._nsites):
                 if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
+                    self.add_percolating_site(site=occup[n])
                 else:
                     self.add_percolating_site()
                 Pn[n]   += w*float(self._nbonds)
@@ -656,7 +680,7 @@ class Percolator(object):
         return Pp
 
     def inaccessible_sites(self, plist, samples=500, save_discrete=False,
-                           initial_occupations=False):
+                           initial_occupations=False, mix=None):
         """
         Estimate the number of inaccessible sites, i.e. sites that are
         not part of a percolating cluster, for a given range of
@@ -667,6 +691,14 @@ class Percolator(object):
           samples        number of samples to average the MC result over
           save_discrete  if True, save the discrete, supercell dependent
                          values as well (file: discrete-wrap.dat)
+          initial_occupations
+                         if True, the initial site occupations will be
+                         (in random order) occupied first
+          mix            only meaningful in conjunction with
+                         initial_occupations=True;
+                         if 0.0 < mix < 1.0, a fraction of 'mix' of the
+                         initially occupied sites will be replaced by
+                         unoccupied ones (e.g., to simulate cation mixing)
 
         Returns:
           list of values corresponding to probabilities in `plist'
@@ -690,10 +722,10 @@ class Percolator(object):
         for i in xrange(samples):
             pb()
             self.reset()
-            np.random.shuffle(occup0)
+            occup = self._mix_and_shuffle(occup0, mix)
             for n in xrange(self._nsites):
                 if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
+                    self.add_percolating_site(site=occup[n])
                 else:
                     self.add_percolating_site()
                 Pn[n] += w*float(n+1-self._npercolating)/float(n+1)
@@ -723,7 +755,7 @@ class Percolator(object):
         return (Pp, Qp)
 
     def percolation_flux(self, plist, samples=500, save_discrete=False,
-                           initial_occupations=False):
+                           initial_occupations=False, mix=None):
         """
         Estimate the ratio of percolation pathes over all possible
         cell boundary sites.
@@ -733,6 +765,14 @@ class Percolator(object):
           samples        number of samples to average the MC result over
           save_discrete  if True, save the discrete, supercell dependent
                          values as well (file: discrete-wrap.dat)
+          initial_occupations
+                         if True, the initial site occupations will be
+                         (in random order) occupied first
+          mix            only meaningful in conjunction with
+                         initial_occupations=True;
+                         if 0.0 < mix < 1.0, a fraction of 'mix' of the
+                         initially occupied sites will be replaced by
+                         unoccupied ones (e.g., to simulate cation mixing)
 
         Returns:
           list of values corresponding to probabilities in `plist'
@@ -757,10 +797,10 @@ class Percolator(object):
         for i in xrange(samples):
             pb()
             self.reset()
-            np.random.shuffle(occup0)
+            occup = self._mix_and_shuffle(occup0, mix)
             for n in xrange(self._nsites):
                 if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
+                    self.add_percolating_site(site=occup[n])
                 else:
                     self.add_percolating_site()
                 Pn[n] += w*self._npaths
@@ -787,9 +827,20 @@ class Percolator(object):
         return Pp
 
     def percolation_point(self, samples=500, file_name=None,
-                          initial_occupations=False):
+                          initial_occupations=False, mix=None):
         """
         Determine an estimate for the site percolation threshold p_c.
+
+        Arguments:
+          samples        number of samples to average the MC result over
+          initial_occupations
+                         if True, the initial site occupations will be
+                         (in random order) occupied first
+          mix            only meaningful in conjunction with
+                         initial_occupations=True;
+                         if 0.0 < mix < 1.0, a fraction of 'mix' of the
+                         initially occupied sites will be replaced by
+                         unoccupied ones (e.g., to simulate cation mixing)
         """
 
         uprint(" Calculating an estimate for the percolation point p_c.")
@@ -817,11 +868,11 @@ class Percolator(object):
         for i in xrange(samples):
             pb()
             self.reset()
-            np.random.shuffle(occup0)
+            occup = self._mix_and_shuffle(occup0, mix)
             done_any = done_two = False
             for n in xrange(self._nsites):
                 if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
+                    self.add_percolating_site(site=occup[n])
                 else:
                     self.add_percolating_site()
                 wrapping = self._is_wrapping[self._largest]
@@ -863,7 +914,6 @@ class Percolator(object):
 
         return (pc_site_any, pc_site_two, pc_site_all,
                 pc_bond_any, pc_bond_two, pc_bond_all)
-
 
     def save_cluster(self, cluster, file_name="CLUSTER.vasp"):
         """
@@ -907,7 +957,6 @@ class Percolator(object):
         struc = Structure(self._avec, species[idx], self._coo[idx])
         poscar = Poscar(struc)
         poscar.write_file(file_name)
-
 
     def compute_surface_area(self, avec):
         """
@@ -974,7 +1023,7 @@ class Percolator(object):
         """
 
         if not self._check_special(site1, site2):
-            return
+           return
 
         # remember bonds
         nb1 = self._neighbors[site1].index(site2)
@@ -1067,3 +1116,48 @@ class Percolator(object):
         # set_special_percolation_rule().
 
         return True
+
+    def _mix_and_shuffle(self, occup0, mix=None):
+        """
+        Shuffle initial ocupations in list 'occup0', and introduce mixing
+        of ratio 'mix'.
+
+        Arguments:
+          occup0    list of initially occupied sites
+          mix       ratio of mixing/noise; 0 < mix <= 1
+                    (ratio wrt. occupied sites)
+        """
+
+        if (len(occup0) == 0):
+            return []
+
+        occup = occup0[:]
+        np.random.shuffle(occup)
+        if mix is not None:
+            # if we would exchange all occupied sites, that would
+            # again correspond to no mixing --> 1.0 mixing = 0.5*noccup
+            nmix = (0.5*mix)*len(occup)
+            nmix_hi = np.ceil(nmix)
+            nmix_lo = np.floor(nmix)
+            # The true mixing ratio can rarely be realized in a structure
+            # with finite number of sites.  Probabilistically select
+            # either the floor or the ceiling:
+            #
+            #     <------ p1 ------> <-- p2 -->
+            #  --|------------------|----------|-->
+            # nmix_lo             nmix      nmix_hi
+            #
+            # p1 --> take nmix_hi;  p2 --> take nmix_lo
+            #
+            r = np.random.random()
+            if (nmix_lo + r > nmix):
+                nmix = int(nmix_lo)
+            else:
+                nmix = int(nmix_hi)
+            # select nmix items from randomized list of vacant sites
+            vacant = list(set(range(self.num_sites)) - set(occup))
+            np.random.shuffle(vacant)
+            occup[0:nmix] = vacant[0:nmix]
+            np.random.shuffle(occup)
+
+        return occup
