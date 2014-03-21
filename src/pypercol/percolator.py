@@ -882,21 +882,28 @@ class Percolator(object):
                     done_any = True
                     if file_name:
                         self.save_cluster(self._largest,
-                             file_name=(file_name+("-1.%05d"%(i,))))
+                             file_name=(file_name+("-cluster-1d.%05d"%(i,))))
+                        self.save_structure(
+                             file_name=(file_name+("-all-1d.%05d"%(i,))))
                 if (np.sum(np.where(wrapping>0,1,0))>=2) and not done_two:
                     pc_site_two += w1*float(n+1)
                     pc_bond_two += w2*float(self._nbonds)
                     done_two = True
                     if file_name:
                         self.save_cluster(self._largest,
-                             file_name=(file_name+("-2.%05d"%(i,))))
+                             file_name=(file_name+("-cluster-2d.%05d"%(i,))))
+                        self.save_structure(
+                             file_name=(file_name+("-all-2d.%05d"%(i,))))
                 if np.all(wrapping>0):
                     pc_site_all += w1*float(n+1)
                     pc_bond_all += w2*float(self._nbonds)
                     if file_name:
                         self.save_cluster(self._largest,
-                             file_name=(file_name+("-3.%05d"%(i,))))
+                             file_name=(file_name+("-cluster-3d.%05d"%(i,))))
+                        self.save_structure(
+                             file_name=(file_name+("-all-3d.%05d"%(i,))))
                     break
+
                 if n == self._nsites-1:
                     stderr.write(
                         "Error: All sites occupied, but no wrapping cluster!?"
@@ -914,6 +921,26 @@ class Percolator(object):
 
         return (pc_site_any, pc_site_two, pc_site_all,
                 pc_bond_any, pc_bond_two, pc_bond_all)
+
+    def save_structure(self, file_name="STRUCTURE.vasp"):
+        """
+        Save the current occupations/the current structure to file.
+        Relies on `pymatgen' for the file I/O.
+        """
+
+        from pymatgen.core.structure import Structure
+        from pymatgen.io.vaspio      import Poscar
+
+        species = ["V" for i in range(self._nsites)]
+        for i in self._occupied:
+            species[i] = "O"
+
+        species = np.array(species)
+        idx = np.argsort(species)
+
+        struc = Structure(self._avec, species[idx], self._coo[idx])
+        poscar = Poscar(struc)
+        poscar.write_file(file_name)
 
     def save_cluster(self, cluster, file_name="CLUSTER.vasp"):
         """
