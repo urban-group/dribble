@@ -1,4 +1,4 @@
-""" Copyright (c) 2013 Alexander Urban
+""" Copyright (c) 2013, 2014 Alexander Urban
 
  Permission is hereby granted, free of charge, to any person obtaining a
  copy of this software and associated documentation files (the
@@ -242,7 +242,6 @@ class Percolator(object):
     def num_sites(self):
         return self._nsites
 
-
     def get_cluster_of_site(self, site, vec=[0,0,0], visited=[]):
         """
         Recursively determine all other sites connected to SITE.
@@ -449,6 +448,37 @@ class Percolator(object):
                     if (cl2 >= 0):
                         self._merge_clusters(cl2, nb2, self._cluster[nb],
                                              nb, -self._T_vectors[nb][j])
+
+    def neighbor_stats(self):
+        """
+        Return average ratio of occupied:vacant sites for all *occupied*
+        sites.
+        """
+
+        nbratio_tot = 0.0
+        for site in self._occupied:
+            nbs = self._neighbors[site]
+            cl = np.array([self._cluster[nb] for nb in nbs])
+            nbratio = float(np.sum(np.where(cl > 0, 1, 0)))/float(len(nbs))
+            nbratio_tot += nbratio
+        return nbratio_tot/float(len(self._occupied))
+
+    def accessible_sites(self, occup):
+        """
+        Fraction of accessible sites for given site occupations.
+
+        Arguments:
+          occup (list)    list with occupied sites
+        """
+
+        self.reset()
+        for site in occup:
+            self.add_percolating_site(site=site)
+
+        accessible = float(self._npercolating)/float(self.num_occupied)
+        largest = float(self._size[self._largest])/float(self.num_occupied)
+
+        return (accessible, largest)
 
     def calc_p_infinity(self, plist, samples=500, save_discrete=False,
                         initial_occupations=False, mix=None):
