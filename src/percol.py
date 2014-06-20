@@ -42,7 +42,7 @@ def percol(poscarfile, samples, save_clusters=False, save_raw=False,
         uprint(" These occupations will be used, but in random order.")
     if mix is not None:
         uprint(" Degree of inter-site mixing: {}".format(mix))
-    print(lattice)
+    uprint(lattice)
 
     uprint(" Initializing percolator...", end="")
     percolator = Percolator(lattice)
