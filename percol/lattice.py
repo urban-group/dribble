@@ -1,40 +1,38 @@
-#!/usr/bin/env python
-
 """
-Insert description here.
+A class to represent lattices.
+
 """
 
 from __future__ import print_function
 
-__author__ = "Alexander Urban"
-__date__   = "2013-02-15"
-
 import numpy as np
 
-from pynblist    import NeighborList
+from percol.pynblist import NeighborList
 
-#----------------------------------------------------------------------#
+__author__ = "Alexander Urban"
+__date__ = "2013-02-15"
+
 
 class Lattice(object):
 
-    def __init__(self, lattice_vectors, frac_coords, decoration=None, 
-                 supercell=(1,1,1), NN_range=None):
+    def __init__(self, lattice_vectors, frac_coords, decoration=None,
+                 supercell=(1, 1, 1), NN_range=None):
         """
         Arguments:
           lattice_vectors    3x3 matrix with lattice vectors in rows
-          frac_coords        Nx3 array; fractional coordinates of the 
+          frac_coords        Nx3 array; fractional coordinates of the
                              N lattice sites
           decoration[i]      initial occupation O of site i (corresponding to
-                             frac_coords[i]); 
+                             frac_coords[i]);
                              O > 0 --> occupied; O < 0 --> vacant
-          supercell          list of multiples of the cell in the three 
+          supercell          list of multiples of the cell in the three
                              spacial directions
         """
 
-        """                    static data 
+        """                    static data
 
         _avec[i][j]   j-th component of the i-th lattice vector
-        _coo[i][j]    j-th component of the coordinates of the i-th 
+        _coo[i][j]    j-th component of the coordinates of the i-th
                       lattice site
         _nsites       total number of lattice sites
 
@@ -42,25 +40,25 @@ class Lattice(object):
         _nn[i][j]           j-th nearest neighbor site of site i
         _nnn[i][j]          j-th next nearest neighbor site of site i
                             (only computed, if requested)
-        _bonds[i][j]        True, if there is a bond between the j-th site 
+        _bonds[i][j]        True, if there is a bond between the j-th site
                             and its j-th neighbor
         _T_nn[i][j]         the translation vector belonging to _nn[i][j]
         _T_nnn[i][j]        the translation vector belonging to _nnn[i][j]
                             (only computed, if requested)
         _N_nn               number of nearest neighbors; integer, if all sites
                             are equivalent, else list of intergers
-        _N_nnn              number of next nearest neighbors; integer, if all 
+        _N_nnn              number of next nearest neighbors; integer, if all
                             sites are equivalent, else list of intergers
                             (only computed, if requested)
-        _nsurface           number of sites at cell boundary 
+        _nsurface           number of sites at cell boundary
                             (only computed, if requested)
         """
 
-        self._avec     = (np.array(lattice_vectors).T * supercell).T
-        self._coo      = []
-        self._occup    = []
+        self._avec = (np.array(lattice_vectors).T * supercell).T
+        self._coo = []
+        self._occup = []
         self._occupied = []
-        self._vacant   = []
+        self._vacant = []
 
         isite = 0
         for i in range(len(frac_coords)):
@@ -72,7 +70,7 @@ class Lattice(object):
             for ix in xrange(supercell[0]):
                 for iy in xrange(supercell[1]):
                     for iz in xrange(supercell[2]):
-                        self._coo.append((coo + [ix, iy, iz])/
+                        self._coo.append((coo + [ix, iy, iz]) /
                                          np.array(supercell, dtype=np.float64))
                         self._occup.append(Oi)
                         if (Oi > 0):
@@ -81,17 +79,17 @@ class Lattice(object):
                             self._vacant.append(isite)
                         isite += 1
 
-        self._coo    = np.array(self._coo)
+        self._coo = np.array(self._coo)
         self._nsites = len(self._coo)
-        self._occup  = np.array(self._occup)
+        self._occup = np.array(self._occup)
 
-        self._dNN      = []
-        self._nn       = []
-        self._nnn      = []
-        self._T_nn     = []
-        self._T_nnn    = []
-        self._N_nn     = 0
-        self._N_nnn    = 0
+        self._dNN = []
+        self._nn = []
+        self._nnn = []
+        self._T_nn = []
+        self._T_nnn = []
+        self._N_nn = 0
+        self._N_nnn = 0
         self._nsurface = 0
 
         self._build_neighbor_list(r_NN=NN_range)
@@ -108,15 +106,15 @@ class Lattice(object):
           species         the species that marks occupied lattice sites
                           all other species will be converted to vacant sites
 
-          All keyword arguments of the main constructor are supported, 
+          All keyword arguments of the main constructor are supported,
           except the initial 'decoration', which is deduced from
           the structure.
         """
-    
-        avec    = structure.lattice.matrix
-        coo     = structure.frac_coords
-        symbol  = np.array([s.symbol for s in structure.species])
-        decorat = np.where(symbol==species, 1, -1)
+
+        avec = structure.lattice.matrix
+        coo = structure.frac_coords
+        symbol = np.array([s.symbol for s in structure.species])
+        decorat = np.where(symbol == species, 1, -1)
 
         lattice = cls(avec, coo, decoration=decorat, **kwargs)
 
@@ -126,7 +124,7 @@ class Lattice(object):
         return self.__str__()
 
     def __str__(self):
-        ostr  = "\n Instance of the Lattice class:\n\n"
+        ostr = "\n Instance of the Lattice class:\n\n"
         ostr += " Lattice vectors:\n\n"
         for v in self._avec:
             ostr += "   {:12.8f}  {:12.8f}  {:12.8f}\n".format(*v)
@@ -140,10 +138,6 @@ class Lattice(object):
         ostr += "\n"
         ostr += str(self._nblist)
         return ostr
-
-    #------------------------------------------------------------------#
-    #                            properties                            #
-    #------------------------------------------------------------------#
 
     @property
     def nn(self):
@@ -173,10 +167,6 @@ class Lattice(object):
     def vacant(self):
         return list(self._vacant)
 
-    #------------------------------------------------------------------#
-    #                          public methods                          #
-    #------------------------------------------------------------------#
-
     def random_decoration(self, p=0.5, N=None):
         """
         Randomly occupy lattice sites.
@@ -194,21 +184,20 @@ class Lattice(object):
 
         idx = np.random.permutation(self._nsites)
         self._occupied = []
-        self._vacant   = range(self._nsites)
+        self._vacant = range(self._nsites)
         for i in range(N):
             self._occupied.append(idx[i])
             del self._vacant[self._vacant.index(idx[i])]
         self._occup[:] = -1
         self._occup[idx[0:N]] = 1
 
-
     def get_nnn_shells(self, dr=0.1):
         """
-        Calculate shells of next nearest neighbors and store them 
+        Calculate shells of next nearest neighbors and store them
         in `nnn'.
         """
-        
-        nnn   = []
+
+        nnn = []
         T_nnn = []
         N_nnn = np.empty(self._nsites, dtype=int)
 
@@ -220,17 +209,17 @@ class Lattice(object):
                 nn_j = self._nn[j]
                 nnnb |= set(nn_j) - set(nn_i) - {i}
             nnnb = list(nnnb)
-            (dist, Tvecs) = pbcdist(i,nnnb[0])
+            (dist, Tvecs) = pbcdist(i, nnnb[0])
             dmin = dist[0]
             nnn_i = []
             T_nnn_i = []
             for j in nnnb:
-                (dist, Tvec) = pbcdist(i,j)
+                (dist, Tvec) = pbcdist(i, j)
                 for k in xrange(len(dist)):
                     if (dist[k] < dmin - dr):
-                        nnn_i   = [j]
+                        nnn_i = [j]
                         T_nnn_i = [Tvec[k]]
-                        dmin    = dist[k]
+                        dmin = dist[k]
                     elif (dist[k] <= dmin + dr):
                         nnn_i.append(j)
                         T_nnn_i.append(Tvec[k])
@@ -238,7 +227,7 @@ class Lattice(object):
             T_nnn.append(T_nnn_i)
             N_nnn[i] = len(nnn_i)
 
-        self._nnn   = nnn
+        self._nnn = nnn
         self._T_nnn = T_nnn
         if (np.all(N_nnn == N_nnn[0])):
             self._N_nnn = int(N_nnn[0])
@@ -257,51 +246,47 @@ class Lattice(object):
         """
 
         from pymatgen.core.structure import Structure
-        from pymatgen.io.vaspio      import Poscar
+        from pymatgen.io.vaspio import Poscar
 
         species = [vacant for i in range(self._nsites)]
         for i in self._occupied:
             species[i] = occupied
 
         species = np.array(species)
-        idx     = np.argsort(species)
+        idx = np.argsort(species)
 
         struc = Structure(self._avec, species[idx], self._coo[idx])
         poscar = Poscar(struc)
         poscar.write_file(file_name)
 
-    #------------------------------------------------------------------#
-    #                         private methods                          #
-    #------------------------------------------------------------------#
-
     def _build_neighbor_list(self, r_NN=None, dr=0.1):
         """
-        Determine the list of neighboring sites for 
+        Determine the list of neighboring sites for
         each site of the lattice.  Allow the next neighbor
         distance to vary about `dr'.
         """
 
-        dNN    = np.empty(self._nsites)
-        N_nn   = np.empty(self._nsites, dtype=int)
-        nbs    = range(self._nsites)
-        Tvecs  = range(self._nsites)
+        dNN = np.empty(self._nsites)
+        N_nn = np.empty(self._nsites, dtype=int)
+        nbs = range(self._nsites)
+        Tvecs = range(self._nsites)
 
-        nblist = NeighborList(self._coo, lattice_vectors=self._avec, 
+        nblist = NeighborList(self._coo, lattice_vectors=self._avec,
                               interaction_range=r_NN, tolerance=dr)
-        
+
         for i in xrange(self._nsites):
             if r_NN:
                 (nbl, dist, T) = nblist.get_neighbors_and_distances(i, dr=dr)
             else:
                 (nbl, dist, T) = nblist.get_nearest_neighbors(i, dr=dr)
-            nbs[i]   = nbl
+            nbs[i] = nbl
             Tvecs[i] = T
-            dNN[i]   = np.min(dist)
-            N_nn[i]  = len(nbl)
+            dNN[i] = np.min(dist)
+            N_nn[i] = len(nbl)
 
         self._nblist = nblist
-        self._nn     = nbs
-        self._T_nn   = Tvecs
+        self._nn = nbs
+        self._T_nn = Tvecs
         if (np.all(np.abs(dNN-dNN[0]) < 0.1*dr)):
             self._dNN = np.min(dNN)
         else:
@@ -311,20 +296,17 @@ class Lattice(object):
         else:
             self._N_nn = N_nn
 
-#----------------------------------------------------------------------#
-#                              unit test                               #
-#----------------------------------------------------------------------#
 
-if (__name__ == "__main__"): #{{{ unit test 
+if (__name__ == "__main__"):  # {{{ unit test
 
     print("\n FCC 4x4x4 cell (64 sites)")
 
-    avec = np.array([ [0.0, 0.5, 0.5],
-                      [0.5, 0.0, 0.5],
-                      [0.5, 0.5, 0.0] ])*5.0
+    avec = np.array([[0.0, 0.5, 0.5],
+                     [0.5, 0.0, 0.5],
+                     [0.5, 0.5, 0.0]])*5.0
 
     coo = np.array([[0.0, 0.0, 0.0]])
-    lat = Lattice(avec, coo, supercell=(4,4,4))
+    lat = Lattice(avec, coo, supercell=(4, 4, 4))
 
     print(lat)
 
@@ -341,8 +323,9 @@ if (__name__ == "__main__"): #{{{ unit test
         print("passed.")
     else:
         print("FAILED!")
-    
-    print(" checking number of next nearest neighbors (6 for FCC) ... ", end="")
+
+    print(" checking number of next nearest neighbors "
+          "(6 for FCC) ... ", end="")
     lat.get_nnn_shells()
     passed = True
     for nnn_i in lat.nnn:
@@ -359,9 +342,9 @@ if (__name__ == "__main__"): #{{{ unit test
 
     print(" testing random decoration of 16 (of 64) sites ... ", end="")
     lat.random_decoration(p=0.25)
-    N1 = np.sum(np.where(lat._occup>0, 1, 0))
+    N1 = np.sum(np.where(lat._occup > 0, 1, 0))
     lat.random_decoration(N=16)
-    N2 = np.sum(np.where(lat._occup>0, 1, 0))
+    N2 = np.sum(np.where(lat._occup > 0, 1, 0))
     if N1 == N2 == 16:
         print("passed.")
     else:
@@ -375,4 +358,3 @@ if (__name__ == "__main__"): #{{{ unit test
         print("FAILED.")
 
     print("")
-

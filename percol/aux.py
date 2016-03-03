@@ -1,27 +1,25 @@
-#!/usr/bin/env python
-
 """
-Insert description here.
+Module with auxiliary functions.
+
 """
 
 from __future__ import print_function
-
-__author__ = "Alexander Urban"
-__date__   = "2013-01-22"
 
 import sys
 import os
 
 import numpy as np
 
-#----------------------------------------------------------------------#
-#                           unbuffered print                           #
-#----------------------------------------------------------------------#
+
+__author__ = "Alexander Urban"
+__date__ = "2013-01-22"
 
 unbuffered = os.fdopen(sys.stdout.fileno(), 'w', 0)
+
+
 def uprint(string, **kwargs):
     """
-    This function is basically the regular (Python 3) print function, 
+    This function is basically the regular (Python 3) print function,
     but it does not buffer the output.
 
     Note: the keyword argument `file' of the print function is
@@ -29,9 +27,6 @@ def uprint(string, **kwargs):
     """
     print(string, file=unbuffered, **kwargs)
 
-#----------------------------------------------------------------------#
-#                          ASCII progress bar                          #
-#----------------------------------------------------------------------#
 
 class ProgressBar(object):
 
@@ -44,16 +39,16 @@ class ProgressBar(object):
           N     number of samples until 100%
           char  the character used to draw the progress bar
         """
-        
-        uprint( " 0%                25%                 "
-              + "50%                 75%                 100%" )
+
+        uprint(" 0%                25%                 "
+               "50%                 75%                 100%")
         uprint(" ", end="")
 
-        self._steps  = N
+        self._steps = N
         self._nprint = int(max(round(float(N)/80.0), 1))
-        self._nchar  = int(max(round(80.0/float(N)), 1))
-        self._char   = char[0]
-        self._count  = -1
+        self._nchar = int(max(round(80.0/float(N)), 1))
+        self._char = char[0]
+        self._count = -1
 
     def __call__(self):
         """
@@ -72,12 +67,6 @@ class ProgressBar(object):
         if (self._count % self._nprint == 0):
             uprint(self._nchar*self._char.encode("utf-8"), end="")
 
-    
-
-
-#----------------------------------------------------------------------#
-#                              functions                               #
-#----------------------------------------------------------------------#
 
 def sigmoidal1(x, x0, y0, A, c):
     """
@@ -94,6 +83,7 @@ def sigmoidal1(x, x0, y0, A, c):
 
     return A*np.tanh(c*(x-x0)) + y0
 
+
 def sigmoidal2(x, x0, y0, A, c):
     """
     Returns a modified sigmoid function.
@@ -106,7 +96,5 @@ def sigmoidal2(x, x0, y0, A, c):
       A      Amplitude
       c      contraction factor
     """
-    
+
     return A/(1.0 + np.exp(-c*(x-x0))) + y0
-
-

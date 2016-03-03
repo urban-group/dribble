@@ -1,5 +1,6 @@
 import timeit
 
+
 def timing(func):
     def wrap(*args, **kwargs):
         t0 = timeit.default_timer()
@@ -9,6 +10,3 @@ def timing(func):
             func.__name__, dt))
         return result
     return wrap
-
-
-
