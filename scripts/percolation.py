@@ -97,6 +97,25 @@ def calc_p_wrapping(percolator, samples, save_raw, occupations,
                 plist[p], Q[p], Qc[p]))
 
 
+def calc_inverse_p_wrapping(percolator, samples, save_raw, occupations,
+                            file_name):
+    plist = np.arange(0.01, 1.00, 0.01)
+    (Q, Qc) = percolator.calc_p_wrapping_inverted(
+        plist, samples=samples,
+        save_discrete=save_raw,
+        initial_occupations=occupations)
+
+    fname = file_name + ".iwrap"
+    uprint(" Writing results to: {}\n".format(fname))
+
+    with open(fname, 'w') as f:
+        f.write("# {:^10s}   {:>10s}   {:>10s}\n".format(
+            "p", "P_iwrap(p)", "cumulative"))
+        for p in xrange(len(plist)):
+            f.write("  {:10.8f}   {:10.8f}   {:10.8f}\n".format(
+                plist[p], Q[p], Qc[p]))
+
+
 def calc_percolating_bonds(percolator, samples, save_raw, occupations,
                            file_name):
     plist = np.arange(0.01, 1.00, 0.01)
@@ -157,12 +176,13 @@ def calc_inaccessible_sites(percolator, samples, save_raw, occupations,
 def compute_percolation(poscarfile, samples, save_clusters=False,
                         save_raw=False, file_name="percol.out",
                         pc=False, check=False, r_NN=None, pinf=False,
-                        pwrap=False, bonds=False, flux=False,
+                        pwrap=False, piwrap=False, bonds=False, flux=False,
                         inaccessible=False, supercell=[1, 1, 1],
                         common=0, same=None, require_NN=False,
                         occupations=False):
 
-    if not (check or pc or pinf or pwrap or bonds or flux or inaccessible):
+    if not (check or pc or pinf or pwrap or piwrap or bonds or flux or
+            inaccessible):
         print("\n Nothing to do.")
         print(" Please specify the quantity to be calculated.")
         print(" Use the `--help' flag to list all options.\n")
@@ -191,8 +211,11 @@ def compute_percolation(poscarfile, samples, save_clusters=False,
             uprint(" Require the common neighbors to be "
                    "themselves nearest neighbors.")
         uprint(" Require same coordinate: {}".format(same))
+        if piwrap:
+            uprint(" Using inverted percolation rules.")
         percolator.set_special_percolation_rule(
-            num_common=common, same=same, require_NN=require_NN)
+            num_common=common, same=same, require_NN=require_NN,
+            inverse=piwrap)
 
     uprint("\n MC percolation simulation\n -------------------------\n")
 
@@ -207,6 +230,9 @@ def compute_percolation(poscarfile, samples, save_clusters=False,
     if pwrap:  # estimate P_wrapping(p)
         calc_p_wrapping(percolator, samples, save_raw, occupations,
                         file_name)
+    if piwrap:  # estimate inverse P_wrapping(p)
+        calc_inverse_p_wrapping(percolator, samples, save_raw, occupations,
+                                file_name)
     if bonds:  # fraction of percolating bonds
         calc_percolating_bonds(percolator, samples, save_raw, occupations,
                                file_name)
@@ -282,6 +308,11 @@ if (__name__ == "__main__"):
         action="store_true")
 
     parser.add_argument(
+        "--piwrap",
+        help="Estimate inverse P_wrap(p) by subsequent removal of sites.",
+        action="store_true")
+
+    parser.add_argument(
         "--samples",
         help="number of samples to be averaged",
         type=int,
@@ -347,6 +378,7 @@ if (__name__ == "__main__"):
                         r_NN=args.NN_range,
                         pinf=args.pinf,
                         pwrap=args.pwrap,
+                        piwrap=args.piwrap,
                         bonds=args.bonds,
                         flux=args.flux,
                         inaccessible=args.inaccessible,

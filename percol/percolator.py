@@ -66,7 +66,8 @@ class Percolator(object):
     def __init__(self, lattice):
         """
         Arguments:
-          lattice  an instance of the Lattice class
+          lattice             an instance of the Lattice class
+
         """
 
         """                    static data
@@ -84,6 +85,7 @@ class Percolator(object):
         """
 
         self._lattice = lattice
+
         # references for convenient access (no copies)
         self._avec = self._lattice._avec
         self._coo = self._lattice._coo
@@ -310,7 +312,8 @@ class Percolator(object):
         #             & set(self._neighbors[site2]))
 
     def set_special_percolation_rule(self, num_common=0, same=None,
-                                     require_NN=False, dr=0.1):
+                                     require_NN=False, inverse=False,
+                                     dr=0.1):
         """
         Define special criteria for a bond between two occupied sites
         to be percolating.
@@ -326,6 +329,8 @@ class Percolator(object):
                        requires the common nearest neighbors themselves
                        to be nearest neighbors (useful for diffusion on
                        an fcc lattice)
+          inverse      invert the meaning of num_common so that the
+                       common neighbor sites are vacant instead of occupied
           dr           required precision for two coordinates to be the 'same'
         """
 
@@ -359,9 +364,14 @@ class Percolator(object):
                 occupied = []
                 noccup = 0
                 for nb in common_nb:
-                    if (self._cluster[nb] >= 0):
-                        occupied.append(nb)
-                        noccup += 1
+                    if inverse:
+                        if (self._cluster[nb] < 0):
+                            occupied.append(nb)
+                            noccup += 1
+                    else:
+                        if (self._cluster[nb] >= 0):
+                            occupied.append(nb)
+                            noccup += 1
                     if (noccup >= num_common):
                         common_rule = True
 
@@ -560,6 +570,104 @@ class Percolator(object):
 
         if save_discrete:
             fname = 'discrete-wrap.dat'
+            uprint("Saving discrete data to file: {}".format(fname))
+            with open(fname, "w") as f:
+                for n in xrange(self._nsites):
+                    f.write("{} {}\n".format(n+1, Pn[n]))
+
+        uprint(" Return convolution with a binomial distribution.\n")
+
+        nlist = np.arange(1, self._nsites+1, dtype=int)
+        Pp = np.empty(len(plist))
+        Ppc = np.empty(len(plist))
+        for i in xrange(len(plist)):
+            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
+            Ppc[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pnc)
+
+        return (Pp, Ppc)
+
+    def calc_p_wrapping_inverted(self, plist, samples=500,
+                                 save_discrete=False,
+                                 initial_occupations=False):
+        """
+        Calculate a Monte-Carlo estimate for the probability P_wrap to find
+        a wrapping cluster.
+
+        This method differs from calc_p_wrapping in that it begins with
+        an occupied lattice and then subsequently vacates occupied
+        sites.  Hence, this only makes sense if the bond criterion is
+        different from the NN rule, so that the fully occupied lattice
+        is not percolating.
+
+        Arguments:
+          plist          list with desired probability points p; 0 < p < 1
+          samples        number of samples to average the MC result over
+          save_discrete  if True, save the discrete, supercell dependent
+                         values as well (file: discrete-wrap.dat)
+
+        Returns:
+          tuple (P_wrap, P_wrap_c)
+          P_wrap         list of values of P_wrap that corespond to `plist'
+          P_wrap_c       the cumulative of P_wrap
+
+        """
+
+        uprint(" Calculating inverted P_wrap(p).")
+        uprint(" Averaging over {} samples:\n".format(samples))
+
+        pb = ProgressBar(samples)
+
+        # remember initial occupations, if desired
+        if initial_occupations:
+            occup0 = self._occupied[:]
+        else:
+            occup0 = range(self._nsites)
+
+        def set_initial_occupations():
+            for site in occup0:
+                sel = self._vacant.index(site)
+                del self._vacant[sel]
+                self._occupied.append(site)
+                self._first.append(site)
+                self._size.append(1)
+                self._is_wrapping.append(np.array([0, 0, 0]))
+                self._cluster[site] = len(self._first) - 1
+                self._nclusters += 1
+                self._vec[site, :] = [0.0, 0.0, 0.0]
+            self._largest = self._cluster[0]
+
+        def del_random_site():
+            sel = np.random.random_integers(0, self.num_occupied-1)
+            site = self._occupied[sel]
+            del self._occupied[sel]
+            self._vacant.append(site)
+            sel = self._first.index(site)
+            del self._first[sel]
+            del self._size[sel]
+            del self._is_wrapping[sel]
+            self._cluster[site] = -1
+            self._nclusters -= 1
+
+        Pn = np.zeros(self._nsites)
+        Pnc = np.zeros(self._nsites)
+        w = 1.0/float(samples)
+        w2 = w*(self._nsites)
+        for i in xrange(samples):
+            pb()
+            self.reset()
+            set_initial_occupations()
+            for n in xrange(self._nsites):
+                del_random_site()
+                nspanning = self.check_spanning()
+                if (nspanning > 0):
+                    Pnc[n:] += w
+                    Pn[n] += w2
+                    break
+
+        pb()
+
+        if save_discrete:
+            fname = 'discrete-iwrap.dat'
             uprint("Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
                 for n in xrange(self._nsites):
