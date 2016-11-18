@@ -954,7 +954,7 @@ class Percolator(object):
         """
 
         from pymatgen.core.structure import Structure
-        from pymatgen.io.vaspio import Poscar
+        from pymatgen.io.vasp.inputs import Poscar
 
         species = ["V" for i in range(self._nsites)]
         i = self._first[cluster]
