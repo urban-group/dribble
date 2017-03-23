@@ -16,7 +16,9 @@ __date__ = "2013-02-15"
 class Lattice(object):
 
     def __init__(self, lattice_vectors, frac_coords, decoration=None,
-                 supercell=(1, 1, 1), NN_range=None):
+                 supercell=(1, 1, 1), NN_range=None, site_labels=None,
+                 species=None, occupying_species=[], static_species=[],
+                 concentrations=None, formula_units=1):
         """
         Arguments:
           lattice_vectors    3x3 matrix with lattice vectors in rows
@@ -27,6 +29,19 @@ class Lattice(object):
                              O > 0 --> occupied; O < 0 --> vacant
           supercell          list of multiples of the cell in the three
                              spacial directions
+          NN_range           cutoff to be used for nearest-neighbor detection
+          site_labels        list of labels for each site
+          species            list of species for each site
+          occupying_species  list of species associated with occupied sites
+          static_species     list of species associated with static sites
+          concentrations     dict with species concentrations for
+                             selected sublattices as dict; requires site labels
+                             Example:
+                             {"A": {"Li": 0.5, "Vac": 0.5},
+                              "B": {"Co": 1.0}}
+          formula_units      Number of formula units in input structure
+                             (only used to compute compositions)
+
         """
 
         """                    static data
@@ -59,30 +74,63 @@ class Lattice(object):
         self._occup = []
         self._occupied = []
         self._vacant = []
+        self._site_labels = []
+        self._species = []
+        self._static = []
+
+        self.num_formula_units = formula_units
+        self.num_formula_units *= supercell[0]*supercell[1]*supercell[2]
 
         isite = 0
         for i in range(len(frac_coords)):
             coo = np.array(frac_coords[i])
-            if np.any(decoration):
+            if decoration is not None:
                 Oi = decoration[i]
             else:
                 Oi = -1
+            if site_labels is not None:
+                label_i = site_labels[i]
+            else:
+                label_i = None
+            if species is not None:
+                species_i = species[i]
+            else:
+                species_i = None
+            static_i = (species_i in static_species)
             for ix in xrange(supercell[0]):
                 for iy in xrange(supercell[1]):
                     for iz in xrange(supercell[2]):
                         self._coo.append((coo + [ix, iy, iz]) /
                                          np.array(supercell, dtype=np.float64))
                         self._occup.append(Oi)
+                        self._site_labels.append(label_i)
+                        self._species.append(species_i)
                         if (Oi > 0):
                             self._occupied.append(isite)
                         else:
                             self._vacant.append(isite)
+                        if static_i:
+                            self._static.append(isite)
                         isite += 1
 
         self._coo = np.array(self._coo)
         self._nsites = len(self._coo)
         self._occup = np.array(self._occup)
 
+        if site_labels is not None and concentrations is not None:
+            self.random_species_decoration(
+                concentrations, occupying_species=occupying_species,
+                static=static_species)
+
+        # stats regarding static sites
+        self._num_static = len(self._static)
+        self._num_sites_not_static = self._nsites - self._num_static
+        self._not_static = list(set(range(self.num_sites)) - set(self._static))
+        self._static_vacant = list(set(self._static) & set(self._vacant))
+        self._static_occupied = list(set(self._static) & set(self._occupied))
+
+        # initialization of the neighbor list
+        self._nblist = []
         self._dNN = []
         self._nn = []
         self._nnn = []
@@ -91,11 +139,12 @@ class Lattice(object):
         self._N_nn = 0
         self._N_nnn = 0
         self._nsurface = 0
-
+        self._nbshells = []
+        self._nbshell_dist = []
         self._build_neighbor_list(r_NN=NN_range)
 
     @classmethod
-    def from_structure(cls, structure, species="O", **kwargs):
+    def from_structure(cls, structure, site_labels=None, **kwargs):
         """
         Create a Lattice instance based on the lattice vectors
         defined in a `structure' object (pymatgen.core.structure).
@@ -103,20 +152,19 @@ class Lattice(object):
         Arguments:
 
           structure       an instance of pymatgen.core.structure.Structure
-          species         the species that marks occupied lattice sites
-                          all other species will be converted to vacant sites
+          site_labels     labels for sublattices; will be determined from
+                          structure if not specified
 
-          All keyword arguments of the main constructor are supported,
-          except the initial 'decoration', which is deduced from
-          the structure.
+          All keyword arguments of the main constructor are supported.
+
         """
 
         avec = structure.lattice.matrix
         coo = structure.frac_coords
-        symbol = np.array([s.symbol for s in structure.species])
-        decorat = np.where(symbol == species, 1, -1)
+        if site_labels is None:
+            site_labels = np.array([s.symbol for s in structure.species])
 
-        lattice = cls(avec, coo, decoration=decorat, **kwargs)
+        lattice = cls(avec, coo, site_labels=site_labels, **kwargs)
 
         return lattice
 
@@ -124,12 +172,16 @@ class Lattice(object):
         return self.__str__()
 
     def __str__(self):
-        ostr = "\n Instance of the Lattice class:\n\n"
+        ostr = "\n Lattice and Sites\n"
+        ostr += " -----------------\n\n"
         ostr += " Lattice vectors:\n\n"
         for v in self._avec:
             ostr += "   {:12.8f}  {:12.8f}  {:12.8f}\n".format(*v)
         ostr += "\n total number of sites : {}".format(self._nsites)
-        ostr += "\n occupied sites        : {}".format(self.num_occupied)
+        ostr += "\n occupied sites        : {} ({} static)".format(
+            self.num_occupied, self.num_static_occupied)
+        ostr += "\n vacant sites          : {} ({} static)".format(
+            self.num_vacant, self.num_static_vacant)
         if type(self._N_nn) == int:
             ostr += "\n number of NNs         : {}".format(self._N_nn)
         else:
@@ -167,6 +219,121 @@ class Lattice(object):
     def vacant(self):
         return list(self._vacant)
 
+    @property
+    def num_static(self):
+        return self._num_static
+
+    @property
+    def num_sites_not_static(self):
+        return self._num_sites_not_static
+
+    @property
+    def num_static_occupied(self):
+        return len(self._static_occupied)
+
+    @property
+    def num_static_vacant(self):
+        return len(self._static_vacant)
+
+    @property
+    def num_vacant_not_static(self):
+        return len(self.vacant_not_static)
+
+    @property
+    def num_occupied_not_static(self):
+        return len(self.occupied_not_static)
+
+    @property
+    def static(self):
+        return list(self._static)
+
+    @property
+    def not_static(self):
+        return list(self._not_static)
+
+    @property
+    def static_occupied(self):
+        return list(self._static_occupied)
+
+    @property
+    def static_vacant(self):
+        return list(self._static_vacant)
+
+    @property
+    def vacant_not_static(self):
+        return list(set(self._vacant) - set(self._static))
+
+    @property
+    def occupied_not_static(self):
+        return list(set(self._occupied) - set(self._static))
+
+    def sublattice(self, sl):
+        """
+        List of sites for a specific sublattice.
+
+        Args:
+          sl    "site label" of the sublattice
+
+        """
+        return [i for i in range(self.num_sites) if self._site_labels[i] == sl]
+
+    @property
+    def species_list(self):
+        """
+        Return list of all species on the lattice.
+
+        """
+        return list(set(self._species))
+
+    def sites_of_species(self, species):
+        """
+        List of sites for specific species.
+
+        Args:
+          species   a site species string
+
+        """
+        return [i for i in range(self.num_sites)
+                if self._species[i] == species]
+
+    def concentration(self, species):
+        """
+        Return concentration of a given species.
+
+        """
+
+        num_species = len(self.sites_of_species(species))
+        return float(num_species)/float(self.num_sites)
+
+    @property
+    def composition(self):
+        """
+        Return concentrations of all species on the lattice.
+
+        """
+        f = float(self.num_sites)/float(self.num_formula_units)
+        comp = {}
+        for s in self.species_list:
+            comp[s] = self.concentration(s)*f
+        return comp
+
+    def check_if_neighbors(self, sites):
+        """
+        Check whether all sites in a set are neighbors.
+
+        """
+        are_neighbors = True
+        num_sites = len(sites)
+        for i in range(num_sites):
+            s1 = sites[i]
+            nb1 = self._nn[s1]
+            for j in range(i+1, num_sites):
+                s2 = sites[j]
+                if s2 not in nb1:
+                    are_neighbors = False
+                    break
+        return are_neighbors
+
     def random_decoration(self, p=0.5, N=None):
         """
         Randomly occupy lattice sites.
@@ -190,6 +357,55 @@ class Lattice(object):
             del self._vacant[self._vacant.index(idx[i])]
         self._occup[:] = -1
         self._occup[idx[0:N]] = 1
+
+    def random_species_decoration(self, concentrations,
+                                  occupying_species=[], static=[]):
+        """
+        Randomly occupy lattice sites with species according to
+        sublattice-specific concentrations.
+
+        Arguments:
+          concentrations   dict with species concentrations for
+                           selected sublattices as dict
+                           Example:
+                           {"A": {"Li": 0.5, "Vac": 0.5},
+                            "B": {"Co": 1.0}}
+          occupying_species  list of species whose sites are considered
+                             occupied
+          static           list of species associated with static sites
+
+        Note: if the concentrations cannot be realized exactly, they
+              will be approximated by rounding
+
+        """
+
+        self._occupied = []
+        self._vacant = range(self._nsites)
+        self._occup[:] = -1
+        self._static = []
+        self._species[:] = [None for i in range(self._nsites)]
+
+        for sl in concentrations:
+            sites = self.sublattice(sl)
+            num_sites = len(sites)
+            decoration = []
+            for species in concentrations[sl]:
+                c = concentrations[sl][species]
+                num_sites_species = int(round(c*num_sites))
+                decoration += [species for i in range(num_sites_species)]
+            while len(decoration) < num_sites:
+                decoration.append(decoration[-1])
+            while len(decoration) > num_sites:
+                decoration = decoration[:-1]
+            decoration = np.random.permutation(decoration)
+            for i, s in enumerate(sites):
+                self._species[s] = decoration[i]
+                if decoration[i] in occupying_species:
+                    self._occupied.append(s)
+                    del self._vacant[self._vacant.index(s)]
+                    self._occup[s] = 1
+                if decoration[i] in static:
+                    self._static.append(s)
 
     def get_nnn_shells(self, dr=0.1):
         """
@@ -243,6 +459,7 @@ class Lattice(object):
           file_name    name of the output file
           vacant       atomic species to be placed at vacant sites
           occupied     atomic species to be placed at occupied sites
+
         """
 
         from pymatgen.core.structure import Structure
@@ -269,7 +486,27 @@ class Lattice(object):
         dNN = np.empty(self._nsites)
         N_nn = np.empty(self._nsites, dtype=int)
         nbs = range(self._nsites)
+        nbshells = range(self._nsites)
+        nbshelldist = range(self._nsites)
         Tvecs = range(self._nsites)
+
+        def neighbor_shells(dist, nbl):
+            """ Sort neighbors by shells. """
+            idx = np.argsort(dist)
+            nb_shells = []
+            shell_dist = []
+            d = 0.0
+            shell = []
+            for i in idx:
+                if dist[i] - dr > d:
+                    nb_shells.append(shell)
+                    shell_dist.append(d)
+                    shell = []
+                    d = dist[i]
+                shell.append(nbl[i])
+            nb_shells.append(shell)
+            shell_dist.append(d)
+            return (nb_shells[1:], shell_dist[1:])
 
         nblist = NeighborList(self._coo, lattice_vectors=self._avec,
                               interaction_range=r_NN, tolerance=dr)
@@ -279,13 +516,16 @@ class Lattice(object):
                 (nbl, dist, T) = nblist.get_neighbors_and_distances(i, dr=dr)
             else:
                 (nbl, dist, T) = nblist.get_nearest_neighbors(i, dr=dr)
-            nbs[i] = nbl
             Tvecs[i] = T
             dNN[i] = np.min(dist)
             N_nn[i] = len(nbl)
+            (nbshells[i], nbshelldist[i]) = neighbor_shells(dist, nbl)
+            nbs[i] = nbl
 
         self._nblist = nblist
         self._nn = nbs
+        self._nbshells = nbshells
+        self._nbshell_dist = nbshelldist
         self._T_nn = Tvecs
         if (np.all(np.abs(dNN-dNN[0]) < 0.1*dr)):
             self._dNN = np.min(dNN)

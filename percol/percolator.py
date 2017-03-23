@@ -1,4 +1,4 @@
-""" Copyright (c) 2013 Alexander Urban
+""" Copyright (c) 2013-2017 Alexander Urban
 
  Permission is hereby granted, free of charge, to any person obtaining a
  copy of this software and associated documentation files (the
@@ -32,6 +32,8 @@ from percol.aux import uprint
 from percol.aux import ProgressBar
 from percol.lattice import Lattice
 
+import json
+
 __autor__ = "Alexander Urban"
 __date__ = "2013-02-15"
 
@@ -61,12 +63,18 @@ class Percolator(object):
     allows to modify the criteria of percolating bonds.
 
     [1] Newman and Ziff, Phys. Rev. Lett. 85, 4104-4107 (2000).
+
     """
 
-    def __init__(self, lattice):
+    def __init__(self, lattice, percolating_species=[],
+                 static_species=[], initial_concentrations=None):
         """
         Arguments:
-          lattice             an instance of the Lattice class
+          lattice              an instance of the Lattice class
+          percolating_species  list of species associated with occupied sites
+          static_species       list of species associated with static sites
+          initial_concentrations  dictionary with species concentrations
+                               for each sublattice
 
         """
 
@@ -85,6 +93,9 @@ class Percolator(object):
         """
 
         self._lattice = lattice
+        self._percolating_species = percolating_species
+        self._static_species = static_species
+        self._initial_concentrations = initial_concentrations
 
         # references for convenient access (no copies)
         self._avec = self._lattice._avec
@@ -102,13 +113,16 @@ class Percolator(object):
         self._bonds = []
         # max. number of bonds is half the number of nearest neighbors
         self._nbonds_tot = 0
-        for i in xrange(self._nsites):
-            nbs = len(set(self._neighbors[i]))
+        for i in range(self._nsites):
+            nbs = len(self._neighbors[i])
+            if nbs > len(set(self._neighbors[i])):
+                raise ValueError("Cell size too small. Try supercell.")
             self._nbonds_tot += nbs
             self._bonds.append(np.array(nbs*[False]))
         self._nbonds_tot /= 2
 
-        self.reset(init=True)
+        initially_occupied_sites = lattice._occupied[:]
+        self.reset(occupied=initially_occupied_sites)
 
         sys.setrecursionlimit(50000)
 
@@ -146,9 +160,11 @@ class Percolator(object):
 
         return percol
 
-    def reset(self, init=False, occupied=[]):
+    def reset(self, occupied=[]):
         """
         Reset the instance to the state of initialization.
+        Static occupied sites are ensured to be always occupied.
+
         """
 
         """              internal dynamic data
@@ -189,17 +205,32 @@ class Percolator(object):
         self._next[:] = -1
         self._vec = np.zeros(self._coo.shape)
 
-        if not init:
-            self._cluster[:] = -1
-            self._occupied = []
-            self._vacant = range(self._nsites)
+        # initial random species decoration, if specified
+        species = [None for i in occupied]
+        if len(occupied) == 0 and self._initial_concentrations is not None:
+            self._lattice.random_species_decoration(
+                self._initial_concentrations,
+                occupying_species=self._percolating_species,
+                static=self._static_species)
+            occupied = self._lattice._occupied[:]
+            species = [self._lattice._species[i] for i in occupied]
+
+        # completely reset lattice
+        self._cluster[:] = -1
+        self._occupied = []
+        self._vacant = range(self._nsites)
+
+        # Composition of all clusters and total composition of percolating
+        # clusters
+        self._cluster_comp = {}
+        self._percol_comp = {}
 
         for i in range(self._nsites):
             self._bonds[i][:] = False
 
-        # initial occupations, if any:
-        for s in occupied:
-            self.add_percolating_site(site=s)
+        # repopulate initial occupations, if any:
+        for i, s in enumerate(occupied):
+            self.add_percolating_site(site=s, species=species[i])
 
     def __str__(self):
         ostr = "\n An instance of the Percolator class\n\n"
@@ -227,16 +258,48 @@ class Percolator(object):
         return len(self._percolating)
 
     @property
+    def num_sites(self):
+        return self._lattice.num_sites
+
+    @property
+    def num_sites_not_static(self):
+        return self._lattice.num_sites_not_static
+
+    @property
+    def _not_static(self):
+        return self._lattice.not_static
+
+    @property
     def num_vacant(self):
-        return len(self._vacant)
+        return self._lattice.num_vacant
 
     @property
     def num_occupied(self):
-        return len(self._occupied)
+        return self._lattice.num_occupied
 
     @property
-    def num_sites(self):
-        return self._nsites
+    def num_vacant_not_static(self):
+        return self._lattice.num_vacant_not_static
+
+    @property
+    def num_occupied_not_static(self):
+        return self._lattice.num_occupied_not_static
+
+    @property
+    def _vacant_not_static(self):
+        return self._lattice.vacant_not_static
+
+    @property
+    def _occupied_not_static(self):
+        return self._lattice.occupied_not_static
+
+    @property
+    def _static_occupied(self):
+        return self._lattice.static_occupied
+
+    @property
+    def _static_vacant(self):
+        return self._lattice.static_vacant
 
     def get_cluster_of_site(self, site, vec=[0, 0, 0], visited=[]):
         """
@@ -346,6 +409,7 @@ class Percolator(object):
             between sites SITE1 and SITE2.
 
             This instance defines a special rule.
+
             """
 
             common_rule = True
@@ -395,30 +459,129 @@ class Percolator(object):
         self._special = True
         self._check_special = new_special
 
-    def add_percolating_site(self, site=None):
+    def set_complex_percolation_rule(self, site_rules={}, bond_rules={},
+                                     verbose=False):
         """
-        Change status of SITE to be percolating.
-        If SITE is not specified, it will be randomly selected.
+        Define complex criteria based on site and bond stability criteria.
+        The format for these specifications is defined elsewhere.
+
+        Arguments:
+          site_rules   dictionary with site stability criteria
+          bond_rules   dictionary with bond stability criteria
+          verbose      if True, print information to stdout
+
         """
 
-        if (self.num_vacant <= 0):
+        def _check_species(sites, rules):
+            """
+            Check if required min/max species counts are satisfied.
+            """
+            satisfied = True
+            species = [self._lattice._species[s] for s in sites]
+            for rule in rules:
+                min_required = rule["min"] if "min" in rule else 0
+                max_allowed = rule["max"] if "max" in rule else np.inf
+                num_sites = len([s for s in species if s in rule["species"]])
+                if (num_sites < min_required) or (num_sites > max_allowed):
+                    satisfied = False
+                    break
+            return satisfied
+
+        def _check_stable(site):
+            """
+            Check whether a site obeys the stability criterion.
+            """
+            stable = True
+            sublattice = self._lattice._site_labels[site]
+            for env in site_rules[sublattice]["stable_neighbor_shells"]:
+                # loop over neighbor shells in site environment
+                for i, nbshell in enumerate(env):
+                    nb_list = self._lattice._nbshells[site][i]
+                    # loop over sublattices in current neighbor shell
+                    for sl in nbshell:
+                        # determine neighbors on select sublattice
+                        neighbors_on_sl = []
+                        for s in nb_list:
+                            if self._lattice._site_labels[s] == sl:
+                                neighbors_on_sl.append(s)
+                        stable &= _check_species(neighbors_on_sl, nbshell[sl])
+            return stable
+
+        def new_special(site1, site2):
+            """
+            Check, d between sites SITE1 and
+            SITE2.
+
+            This instance defines a complex percolation rule.
+
+            """
+
+            percolating = True
+
+            # sublattices
+            sl1 = self._lattice._site_labels[site1]
+            sl2 = self._lattice._site_labels[site2]
+            bond = set([sl1, sl2])
+            if bond not in bond_rules:
+                percolating = False
+                return
+
+            percolating &= _check_stable(site1)
+            percolating &= _check_stable(site2)
+
+            return percolating
+
+        self._special = True
+        self._complex = True
+        self._check_special = new_special
+
+    def add_percolating_site(self, site=None, species=None):
+        """
+        Change status of SITE to be percolating.
+
+        Args:
+          site    optional site index; if not specified, the site will be
+                  randomly selected
+          species optional species that will be assigned with the newly
+                  percolating site
+
+        Note: The present implementation only considers bonds between
+              nearest-neighbor sites!
+
+        """
+
+        if (self.num_vacant_not_static <= 0):
             stderr.write("Warning: all sites are already occupied\n")
             return
 
         if site is None:
-            sel = np.random.random_integers(0, self.num_vacant-1)
-            site = self._vacant[sel]
-        else:
+            sel = np.random.random_integers(0, self.num_vacant_not_static-1)
+            site = self._vacant_not_static[sel]
+        elif (site in self._vacant) and (site not in self._static_vacant):
             sel = self._vacant.index(site)
+        else:
+            stderr.write("Warning: Attempt to occupy invalid site.\n")
+            if site in self._occupied:
+                stderr.write(
+                    "         Site {} is already occupied.\n".format(site))
+            if site in self._static_vacant:
+                stderr.write(
+                    "         Site {} is a static vacancy.\n".format(site))
+            return
 
         del self._vacant[sel]
         self._occupied.append(site)
+        # if species is not None:
+        #     self._lattice._species[site] = species
+        self._lattice._species[site] = species
 
         # for the moment, add a new cluster
         self._first.append(site)
         self._size.append(1)
         self._is_wrapping.append(np.array([0, 0, 0]))
-        self._cluster[site] = len(self._first) - 1
+        cl = len(self._first) - 1
+        self._cluster[site] = cl
+        self._cluster_comp[cl] = {species: 1}
         self._nclusters += 1
         self._vec[site, :] = [0.0, 0.0, 0.0]
         if (self._largest < 0):
@@ -428,12 +591,14 @@ class Percolator(object):
         # - defines a new cluster,
         # - will be added to an existing cluster, or
         # - connects multiple existing clusters.
-        for i in xrange(len(self._neighbors[site])):
+        for i in range(len(self._neighbors[site])):
             nb = self._neighbors[site][i]
             cl = self._cluster[nb]
             if (cl >= 0):
-                self._merge_clusters(cl, nb, self._cluster[site],
-                                     site, -self._T_vectors[site][i])
+                # only consider bonds between nearest neighbors
+                if nb in self._lattice._nbshells[site][0]:
+                    self._merge_clusters(cl, nb, self._cluster[site],
+                                         site, -self._T_vectors[site][i])
 
                 # update also next nearest neighbors
                 # (only in case of special percolation rules)
@@ -441,15 +606,16 @@ class Percolator(object):
                     continue
 
                 # loop over the neighbors of the neighbor
-                for j in xrange(len(self._neighbors[nb])):
+                for j in range(len(self._neighbors[nb])):
                     nb2 = self._neighbors[nb][j]
                     cl2 = self._cluster[nb2]
-                    if (cl2 >= 0):
+                    # also here: consider only neares-neighbor bonds
+                    if (cl2 >= 0) and (nb2 in self._lattice._nbshells[nb][0]):
                         self._merge_clusters(cl2, nb2, self._cluster[nb],
                                              nb, -self._T_vectors[nb][j])
 
-    def calc_p_infinity(self, plist, samples=500, save_discrete=False,
-                        initial_occupations=False):
+    def calc_p_infinity(self, plist, sequence, samples=500,
+                        save_discrete=False):
         """
         Calculate a Monte-Carlo estimate for the probability P_inf
         to find an infinitly extended cluster along with the percolation
@@ -457,6 +623,11 @@ class Percolator(object):
 
         Arguments:
           plist          list with desired probability points p; 0 < p < 1
+          sequence       list with sequence of species to be flipped; each
+                         pair of species has to be one non-percolating and
+                         one percolating species
+                         Example:
+                         sequence = [["M1", "Li"], ["M2", "Li"]]
           samples        number of samples to average the MC result over
           save_discrete  if True, save the discrete, supercell dependent
                          values as well (file: discrete.dat)
@@ -466,31 +637,40 @@ class Percolator(object):
           that correspond to the desired probabilities in `plist'
         """
 
+        self.reset()
         uprint(" Calculating P_infty(p) and Chi(p).")
-        uprint(" Averaging over {} samples:\n".format(samples))
-
+        uprint(" Initial composition: ", end="")
+        comp = self._lattice.composition
+        for s in comp:
+            uprint("{} {:.2f} ".format(s, comp[s]), end="")
+        uprint("\n Averaging over {} samples:\n".format(samples))
         pb = ProgressBar(samples)
 
-        # remember initial occupations, if desired
-        if initial_occupations:
-            occup0 = self._occupied[:]
-        else:
-            occup0 = []
-        nocc = len(occup0)
+        # Cluster sizes should be based on only the currently active
+        # species, but the way it is presently implemented all percolating
+        # sites contribute to the cluster size.
+        uprint(" Warning: this method does not consider the correct")
+        uprint("          cluster sizes if multiple percolating")
+        uprint("          species exist.")
 
-        Pn = np.zeros(self._nsites)
-        Xn = np.zeros(self._nsites)
+        num_active_sites = 0
+        for initial, final in sequence:
+            num_active_sites += len(self._lattice.sites_of_species(initial))
+
+        Pn = np.zeros(num_active_sites)
+        Xn = np.zeros(num_active_sites)
         w = 1.0/float(samples)
-        w2 = w*float(self._nsites)
+        w2 = w*float(num_active_sites)
         for i in xrange(samples):
             pb()
             self.reset()
-            np.random.shuffle(occup0)
-            for n in xrange(self._nsites):
-                if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
-                else:
-                    self.add_percolating_site()
+            flip_list = []
+            for initial, final in sequence:
+                sites = self._lattice.sites_of_species(initial)
+                np.random.shuffle(sites)
+                flip_list += [(s, final) for s in sites]
+            for n, (site, species) in enumerate(flip_list):
+                self.add_percolating_site(site=site, species=species)
                 Pn[n] += w*(float(self._size[self._largest])/float(n+1))
                 for cl in xrange(len(self._size)):
                     if cl == self._largest:
@@ -501,30 +681,35 @@ class Percolator(object):
 
         if save_discrete:
             fname = 'discrete.dat'
-            uprint("Saving discrete data to file: {}".format(fname))
+            uprint(" Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
-                for n in xrange(self._nsites):
+                for n in xrange(num_active_sites):
                     f.write("{} {} {}\n".format(n+1, Pn[n], Xn[n]))
 
         uprint(" Return convolution with a binomial distribution.\n")
 
-        nlist = np.arange(1, self._nsites+1, dtype=int)
+        nlist = np.arange(1, num_active_sites+1, dtype=int)
         Pp = np.empty(len(plist))
         Xp = np.empty(len(plist))
         for i in xrange(len(plist)):
-            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
-            Xp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Xn)
+            Pp[i] = np.sum(binom.pmf(nlist, num_active_sites, plist[i])*Pn)
+            Xp[i] = np.sum(binom.pmf(nlist, num_active_sites, plist[i])*Xn)
 
         return (Pp, Xp)
 
-    def calc_p_wrapping(self, plist, samples=500, save_discrete=False,
-                        initial_occupations=False):
+    def calc_p_wrapping(self, plist, sequence, samples=500,
+                        save_discrete=False):
         """
         Calculate a Monte-Carlo estimate for the probability P_wrap
         to find a wrapping cluster.
 
         Arguments:
           plist          list with desired probability points p; 0 < p < 1
+          sequence       list with sequence of species to be flipped; each
+                         pair of species has to be one non-percolating and
+                         one percolating species
+                         Example:
+                         sequence = [["M1", "Li"], ["M2", "Li"]]
           samples        number of samples to average the MC result over
           save_discrete  if True, save the discrete, supercell dependent
                          values as well (file: discrete-wrap.dat)
@@ -533,33 +718,32 @@ class Percolator(object):
           tuple (P_wrap, P_wrap_c)
           P_wrap         list of values of P_wrap that corespond to `plist'
           P_wrap_c       the cumulative of P_wrap
+
         """
 
+        self.reset()
         uprint(" Calculating P_wrap(p).")
         uprint(" Averaging over {} samples:\n".format(samples))
-
         pb = ProgressBar(samples)
 
-        # remember initial occupations, if desired
-        if initial_occupations:
-            occup0 = self._occupied[:]
-        else:
-            occup0 = []
-        nocc = len(occup0)
+        num_active_sites = 0
+        for initial, final in sequence:
+            num_active_sites += len(self._lattice.sites_of_species(initial))
 
-        Pn = np.zeros(self._nsites)
-        Pnc = np.zeros(self._nsites)
+        Pn = np.zeros(num_active_sites)
+        Pnc = np.zeros(num_active_sites)
         w = 1.0/float(samples)
-        w2 = w*(self._nsites)
+        w2 = w*(num_active_sites)
         for i in xrange(samples):
             pb()
             self.reset()
-            np.random.shuffle(occup0)
-            for n in xrange(self._nsites):
-                if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
-                else:
-                    self.add_percolating_site()
+            flip_list = []
+            for initial, final in sequence:
+                sites = self._lattice.sites_of_species(initial)
+                np.random.shuffle(sites)
+                flip_list += [(s, final) for s in sites]
+            for n, (site, species) in enumerate(flip_list):
+                self.add_percolating_site(site=site, species=species)
                 wrapping = np.sum(self._is_wrapping[self._largest])
                 if (wrapping > 0):
                     Pnc[n:] += w
@@ -572,178 +756,24 @@ class Percolator(object):
             fname = 'discrete-wrap.dat'
             uprint("Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
-                for n in xrange(self._nsites):
+                for n in xrange(num_active_sites):
                     f.write("{} {}\n".format(n+1, Pn[n]))
 
         uprint(" Return convolution with a binomial distribution.\n")
 
-        nlist = np.arange(1, self._nsites+1, dtype=int)
+        nlist = np.arange(1, num_active_sites+1, dtype=int)
         Pp = np.empty(len(plist))
         Ppc = np.empty(len(plist))
         for i in xrange(len(plist)):
-            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
-            Ppc[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pnc)
+            Pp[i] = np.sum(binom.pmf(
+                nlist, num_active_sites, plist[i])*Pn)
+            Ppc[i] = np.sum(binom.pmf(
+                nlist, num_active_sites, plist[i])*Pnc)
 
         return (Pp, Ppc)
 
-    def calc_p_wrapping_inverted(self, plist, samples=500,
-                                 save_discrete=False,
-                                 initial_occupations=False):
-        """
-        Calculate a Monte-Carlo estimate for the probability P_wrap to find
-        a wrapping cluster.
-
-        This method differs from calc_p_wrapping in that it begins with
-        an occupied lattice and then subsequently vacates occupied
-        sites.  Hence, this only makes sense if the bond criterion is
-        different from the NN rule, so that the fully occupied lattice
-        is not percolating.
-
-        Arguments:
-          plist          list with desired probability points p; 0 < p < 1
-          samples        number of samples to average the MC result over
-          save_discrete  if True, save the discrete, supercell dependent
-                         values as well (file: discrete-wrap.dat)
-
-        Returns:
-          tuple (P_wrap, P_wrap_c)
-          P_wrap         list of values of P_wrap that corespond to `plist'
-          P_wrap_c       the cumulative of P_wrap
-
-        """
-
-        uprint(" Calculating inverted P_wrap(p).")
-        uprint(" Averaging over {} samples:\n".format(samples))
-
-        pb = ProgressBar(samples)
-
-        # remember initial occupations, if desired
-        if initial_occupations:
-            occup0 = self._occupied[:]
-        else:
-            occup0 = range(self._nsites)
-
-        def set_initial_occupations():
-            for site in occup0:
-                sel = self._vacant.index(site)
-                del self._vacant[sel]
-                self._occupied.append(site)
-                self._first.append(site)
-                self._size.append(1)
-                self._is_wrapping.append(np.array([0, 0, 0]))
-                self._cluster[site] = len(self._first) - 1
-                self._nclusters += 1
-                self._vec[site, :] = [0.0, 0.0, 0.0]
-            self._largest = self._cluster[0]
-
-        def del_random_site():
-            sel = np.random.random_integers(0, self.num_occupied-1)
-            site = self._occupied[sel]
-            del self._occupied[sel]
-            self._vacant.append(site)
-            sel = self._first.index(site)
-            del self._first[sel]
-            del self._size[sel]
-            del self._is_wrapping[sel]
-            self._cluster[site] = -1
-            self._nclusters -= 1
-
-        Pn = np.zeros(self._nsites)
-        Pnc = np.zeros(self._nsites)
-        w = 1.0/float(samples)
-        w2 = w*(self._nsites)
-        for i in xrange(samples):
-            pb()
-            self.reset()
-            set_initial_occupations()
-            for n in xrange(self._nsites):
-                del_random_site()
-                nspanning = self.check_spanning()
-                if (nspanning > 0):
-                    Pnc[n:] += w
-                    Pn[n] += w2
-                    break
-
-        pb()
-
-        if save_discrete:
-            fname = 'discrete-iwrap.dat'
-            uprint("Saving discrete data to file: {}".format(fname))
-            with open(fname, "w") as f:
-                for n in xrange(self._nsites):
-                    f.write("{} {}\n".format(n+1, Pn[n]))
-
-        uprint(" Return convolution with a binomial distribution.\n")
-
-        nlist = np.arange(1, self._nsites+1, dtype=int)
-        Pp = np.empty(len(plist))
-        Ppc = np.empty(len(plist))
-        for i in xrange(len(plist)):
-            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
-            Ppc[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pnc)
-
-        return (Pp, Ppc)
-
-    def percolating_bonds(self, plist, samples=500, save_discrete=False,
-                          initial_occupations=False):
-        """
-        Estimate number of percolating bonds in dependence of site
-        concentration.
-
-        Arguments:
-          plist          list with desired probability points p; 0 < p < 1
-          samples        number of samples to average the MC result over
-          save_discrete  if True, save the discrete, supercell dependent
-                         values as well (file: discrete-wrap.dat)
-
-        Returns:
-          list of fractions of all bonds for certain concentration
-        """
-
-        uprint(" Calculating fraction F_bonds(p) of percolating bonds.")
-        uprint(" Averaging over {} samples:\n".format(samples))
-
-        pb = ProgressBar(samples)
-
-        # remember initial occupations, if desired
-        if initial_occupations:
-            occup0 = self._occupied[:]
-        else:
-            occup0 = []
-        nocc = len(occup0)
-
-        Pn = np.zeros(self._nsites)
-        w = 1.0/float(samples)/float(self._nbonds_tot)
-        for i in xrange(samples):
-            pb()
-            self.reset()
-            np.random.shuffle(occup0)
-            for n in xrange(self._nsites):
-                if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
-                else:
-                    self.add_percolating_site()
-                Pn[n] += w*float(self._nbonds)
-        pb()
-
-        if save_discrete:
-            fname = 'discrete-bonds.dat'
-            uprint("Saving discrete data to file: {}".format(fname))
-            with open(fname, "w") as f:
-                for n in xrange(self._nsites):
-                    f.write("{} {}\n".format(n+1, Pn[n]))
-
-        uprint(" Return convolution with a binomial distribution.\n")
-
-        nlist = np.arange(1, self._nsites+1, dtype=int)
-        Pp = np.empty(len(plist))
-        for i in xrange(len(plist)):
-            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
-
-        return Pp
-
-    def inaccessible_sites(self, plist, samples=500, save_discrete=False,
-                           initial_occupations=False):
+    def inaccessible_sites(self, plist, sequence, species, samples=500,
+                           save_discrete=False):
         """
         Estimate the number of inaccessible sites, i.e. sites that are
         not part of a percolating cluster, for a given range of
@@ -751,6 +781,14 @@ class Percolator(object):
 
         Arguments:
           plist          list with desired probability points p; 0 < p < 1
+          sequence       list with sequence of species to be flipped; each
+                         pair of species has to be one non-percolating and
+                         one percolating species
+                         Example:
+                         sequence = [["M1", "Li"], ["M2", "Li"]]
+          species        reference species whose sites shall be considered;
+                         must be a percolating species; usually one of the
+                         'final' species from the slipping sequence
           samples        number of samples to average the MC result over
           save_discrete  if True, save the discrete, supercell dependent
                          values as well (file: discrete-wrap.dat)
@@ -759,50 +797,55 @@ class Percolator(object):
           list of values corresponding to probabilities in `plist'
         """
 
-        uprint(" Calculating fraction of inaccessible sites.")
+        uprint(" Calculating fraction of inaccessible "
+               "{} sites.".format(species))
         uprint(" Averaging over {} samples:\n".format(samples))
 
         pb = ProgressBar(samples)
 
-        # remember initial occupations, if desired
-        if initial_occupations:
-            occup0 = self._occupied[:]
-        else:
-            occup0 = []
-        nocc = len(occup0)
+        num_active_sites = 0
+        for initial, final in sequence:
+            num_active_sites += len(self._lattice.sites_of_species(initial))
 
-        Pn = np.zeros(self._nsites)
-        Qn = np.zeros(self._nsites)
+        Pn = np.zeros(num_active_sites)
+        Qn = np.zeros(num_active_sites)
         w = 1.0/float(samples)
         for i in xrange(samples):
             pb()
             self.reset()
-            np.random.shuffle(occup0)
-            for n in xrange(self._nsites):
-                if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
-                else:
-                    self.add_percolating_site()
-                Pn[n] += w*float(n+1-self._npercolating)/float(n+1)
+            flip_list = []
+            for initial, final in sequence:
+                sites = self._lattice.sites_of_species(initial)
+                np.random.shuffle(sites)
+                flip_list += [(s, final) for s in sites]
+            for n, (site, species) in enumerate(flip_list):
+                self.add_percolating_site(site=site, species=species)
+                N_ref = len(self._lattice.sites_of_species(species))
+                try:
+                    N_ref_percol = self._percol_comp[species]
+                except KeyError:
+                    N_ref_percol = 0
+                Pn[n] += w*float(N_ref - N_ref_percol)/float(N_ref)
+                # Pn[n] += w*float(n+1-self._npercolating)/float(n+1)
                 Qn[n] += w*float(self._nclus_percol)/float(self._nclusters)
 
         pb()
 
         if save_discrete:
             fname = 'discrete-inaccessible.dat'
-            uprint("Saving discrete data to file: {}".format(fname))
+            uprint(" Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
-                for n in xrange(self._nsites):
+                for n in xrange(num_active_sites):
                     f.write("{} {} {}\n".format(n+1, Pn[n], Qn[n]))
 
         uprint(" Return convolution with a binomial distribution.\n")
 
-        nlist = np.arange(1, self._nsites+1, dtype=int)
+        nlist = np.arange(1, num_active_sites+1, dtype=int)
         Pp = np.empty(len(plist))
         Qp = np.empty(len(plist))
         for i in xrange(len(plist)):
-            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
-            Qp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Qn)
+            Pp[i] = np.sum(binom.pmf(nlist, num_active_sites, plist[i])*Pn)
+            Qp[i] = np.sum(binom.pmf(nlist, num_active_sites, plist[i])*Qn)
 
         return (Pp, Qp)
 
@@ -831,18 +874,18 @@ class Percolator(object):
 
         # remember initial occupations, if desired
         if initial_occupations:
-            occup0 = self._occupied[:]
+            occup0 = self._occupied_not_static[:]
         else:
             occup0 = []
         nocc = len(occup0)
 
-        Pn = np.zeros(self._nsites)
+        Pn = np.zeros(self.num_sites_not_static)
         w = 1.0/float(samples)/A
         for i in xrange(samples):
             pb()
             self.reset()
             np.random.shuffle(occup0)
-            for n in xrange(self._nsites):
+            for n in xrange(self.num_sites_not_static):
                 if n < nocc:
                     self.add_percolating_site(site=occup0[n])
                 else:
@@ -855,35 +898,43 @@ class Percolator(object):
             fname = 'discrete-flux.dat'
             uprint("Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
-                for n in xrange(self._nsites):
+                for n in xrange(self.num_sites_not_static):
                     f.write("{} {}\n".format(n+1, Pn[n]))
 
         uprint(" Return convolution with a binomial distribution.\n")
 
-        nlist = np.arange(1, self._nsites+1, dtype=int)
+        nlist = np.arange(1, self.num_sites_not_static+1, dtype=int)
         Pp = np.empty(len(plist))
         for i in xrange(len(plist)):
-            Pp[i] = np.sum(binom.pmf(nlist, self._nsites, plist[i])*Pn)
+            Pp[i] = np.sum(binom.pmf(
+                nlist, self.num_sites_not_static, plist[i])*Pn)
 
         return Pp
 
-    def percolation_point(self, samples=500, file_name=None,
-                          initial_occupations=False):
+    def percolation_point(self, sequence, samples=500, file_name=None):
         """
         Determine an estimate for the site percolation threshold p_c.
+
+        Args:
+          sequence   list with sequence of species to be flipped; each
+                     pair of species has to be one non-percolating and
+                     one percolating species
+                     Example:
+                     sequence = [["M1", "Li"], ["M2", "Li"]]
+          samples    number of runs to average over
+          file_name  file name to store raw data
+
         """
 
+        self.reset()
         uprint(" Calculating an estimate for the percolation point p_c.")
-        uprint(" Averaging over {} samples:\n".format(samples))
+        uprint(" Initial composition: ", end="")
+        comp = self._lattice.composition
+        for s in comp:
+            uprint("{} {:.2f} ".format(s, comp[s]), end="")
+        uprint("\n Averaging over {} samples:\n".format(samples))
 
         pb = ProgressBar(samples)
-
-        # remember initial occupations, if desired
-        if initial_occupations:
-            occup0 = self._occupied[:]
-        else:
-            occup0 = []
-        nocc = len(occup0)
 
         pc_site_any = 0.0
         pc_site_two = 0.0
@@ -893,18 +944,22 @@ class Percolator(object):
         pc_bond_two = 0.0
         pc_bond_all = 0.0
 
-        w1 = 1.0/float(samples)/float(self._nsites)
-        w2 = 1.0/float(samples)/float(self._nbonds_tot)
+        percolating_composition = {s: 0.0 for s in comp}
+        w = 1.0/float(samples)
+        w2 = w/float(self._nbonds_tot)
         for i in xrange(samples):
             pb()
             self.reset()
-            np.random.shuffle(occup0)
+            flip_list = []
+            for initial, final in sequence:
+                sites = self._lattice.sites_of_species(initial)
+                np.random.shuffle(sites)
+                flip_list += [(s, final) for s in sites]
+            num_active_sites = len(flip_list)
+            w1 = w/float(num_active_sites)
             done_any = done_two = False
-            for n in xrange(self._nsites):
-                if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
-                else:
-                    self.add_percolating_site()
+            for n, (site, species) in enumerate(flip_list):
+                self.add_percolating_site(site=site, species=species)
                 wrapping = self._is_wrapping[self._largest]
                 if (np.sum(wrapping) > 0) and not done_any:
                     pc_site_any += w1*float(n+1)
@@ -914,6 +969,12 @@ class Percolator(object):
                         self.save_cluster(
                             self._largest,
                             file_name=(file_name+("-1.%05d" % (i,))))
+                    comp = self._lattice.composition
+                    for s in comp:
+                        if s in percolating_composition:
+                            percolating_composition[s] += comp[s]*w
+                        else:
+                            percolating_composition[s] = comp[s]*w
                 if (np.sum(
                         np.where(wrapping > 0, 1, 0)) >= 2) and not done_two:
                     pc_site_two += w1*float(n+1)
@@ -931,7 +992,7 @@ class Percolator(object):
                             self._largest,
                             file_name=(file_name + ("-3.%05d" % (i,))))
                     break
-                if n == self._nsites-1:
+                if n == num_active_sites-1:
                     stderr.write(
                         "Error: All sites occupied, but no wrapping "
                         "cluster!?\n       "
@@ -939,10 +1000,14 @@ class Percolator(object):
                         "never percolates.\n       "
                         "Have a look at `ERROR.vasp'.\n")
                     self.save_cluster(self._largest, file_name="ERROR.vasp")
-                    print(wrapping)
                     sys.exit()
 
         pb()
+
+        uprint(" Average percolating composition: ", end="")
+        for s in percolating_composition:
+            uprint("{} {:.2f} ".format(s, percolating_composition[s]), end="")
+        uprint("\n")
 
         return (pc_site_any, pc_site_two, pc_site_all,
                 pc_bond_any, pc_bond_two, pc_bond_all)
@@ -1047,6 +1112,7 @@ class Percolator(object):
     def _merge_clusters(self, cluster1, site1, cluster2, site2, T2):
         """
         Add sites of cluster2 to cluster1.
+
         """
 
         if not self._check_special(site1, site2):
@@ -1080,6 +1146,11 @@ class Percolator(object):
                 self._npaths += 1
             if (wrapping1 == 0) and np.sum(self._is_wrapping[cluster1]) > 0:
                 self._npercolating += self._size[cluster1]
+                for s, c in self._cluster_comp[cluster1].items():
+                    if s in self._percol_comp:
+                        self._percol_comp[s] += c
+                    else:
+                        self._percol_comp[s] = c
                 self._nclus_percol += 1
             return
         else:
@@ -1088,8 +1159,18 @@ class Percolator(object):
             wrapping2 = np.sum(self._is_wrapping[cluster2])
             if (wrapping1 > 0) and (wrapping2 == 0):
                 self._npercolating += self._size[cluster2]
+                for s, c in self._cluster_comp[cluster2].items():
+                    if s in self._percol_comp:
+                        self._percol_comp[s] += c
+                    else:
+                        self._percol_comp[s] = c
             elif (wrapping1 == 0) and (wrapping2 > 0):
                 self._npercolating += self._size[cluster1]
+                for s, c in self._cluster_comp[cluster1].items():
+                    if s in self._percol_comp:
+                        self._percol_comp[s] += c
+                    else:
+                        self._percol_comp[s] = c
             elif (wrapping1 > 0) and (wrapping2 > 0):
                 self._nclus_percol -= 1
 
@@ -1118,6 +1199,13 @@ class Percolator(object):
         l1 = self._is_wrapping[cluster1]
         l2 = self._is_wrapping[cluster2]
         self._is_wrapping[cluster1] = l1 + l2
+
+        # combined cluster composition
+        for s, c2 in self._cluster_comp[cluster2].items():
+            if s in self._cluster_comp[cluster1]:
+                self._cluster_comp[cluster1][s] += c2
+            else:
+                self._cluster_comp[cluster1][s] = c2
 
         # Only delete the cluster, if it is the last in the list.
         # Otherwise we would have to update the cluster IDs on all sites.

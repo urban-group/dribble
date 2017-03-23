@@ -6,6 +6,8 @@ import time
 
 import numpy as np
 
+from percol.io import Input
+
 try:
     from pymatgen.io.vasp import Poscar
 except ImportError:
@@ -32,37 +34,34 @@ def check_if_percolating(percolator):
 
 
 def calc_critical_concentration(percolator, save_clusters, samples,
-                                file_name, occupations):
+                                file_name, sequence):
     if save_clusters:
         (pc_site_any, pc_site_two, pc_site_all, pc_bond_any,
          pc_bond_two, pc_bond_all) = percolator.percolation_point(
-             samples=samples, file_name=file_name+".vasp",
-             initial_occupations=occupations)
+             sequence, samples=samples, file_name=file_name+".vasp")
     else:
         (pc_site_any, pc_site_two, pc_site_all, pc_bond_any,
          pc_bond_two, pc_bond_all) = percolator.percolation_point(
-             samples=samples, initial_occupations=occupations)
+             sequence, samples=samples)
 
     uprint(" Critical site (bond) concentrations to find a "
            "wrapping cluster\n")
 
-    uprint(" in one or more dimensions   p_c = {:.8f}  ({:.8f})".format(
+    uprint(" in one or more dimensions   p_c1 = {:.8f}  ({:.8f})".format(
         pc_site_any, pc_bond_any))
-    uprint(" in two or three dimensions  p_c = {:.8f}  ({:.8f})".format(
+    uprint(" in two or three dimensions  p_c2 = {:.8f}  ({:.8f})".format(
         pc_site_two, pc_bond_two))
-    uprint(" in all three dimensions     p_c = {:.8f}  ({:.8f})".format(
+    uprint(" in all three dimensions     p_c3 = {:.8f}  ({:.8f})".format(
         pc_site_all, pc_bond_all))
 
     uprint("")
 
 
-def calc_p_infinity(percolator, samples, save_raw, occupations,
-                    file_name):
+def calc_p_infinity(percolator, samples, save_raw, file_name, sequence):
     plist = np.arange(0.01, 1.00, 0.01)
     (Q, X) = percolator.calc_p_infinity(
-        plist, samples=samples,
-        save_discrete=save_raw,
-        initial_occupations=occupations)
+        plist, sequence, samples=samples,
+        save_discrete=save_raw)
 
     # integrate susceptibility X in order to normalize it
     intX = np.sum(X)*(plist[1]-plist[0])
@@ -78,13 +77,11 @@ def calc_p_infinity(percolator, samples, save_raw, occupations,
                 plist[p], Q[p], X[p], X[p]/intX))
 
 
-def calc_p_wrapping(percolator, samples, save_raw, occupations,
-                    file_name):
+def calc_p_wrapping(percolator, samples, save_raw, file_name, sequence):
     plist = np.arange(0.01, 1.00, 0.01)
     (Q, Qc) = percolator.calc_p_wrapping(
-        plist, samples=samples,
-        save_discrete=save_raw,
-        initial_occupations=occupations)
+        plist, sequence, samples=samples,
+        save_discrete=save_raw)
 
     fname = file_name + ".wrap"
     uprint(" Writing results to: {}\n".format(fname))
@@ -97,70 +94,12 @@ def calc_p_wrapping(percolator, samples, save_raw, occupations,
                 plist[p], Q[p], Qc[p]))
 
 
-def calc_inverse_p_wrapping(percolator, samples, save_raw, occupations,
-                            file_name):
-    plist = np.arange(0.01, 1.00, 0.01)
-    (Q, Qc) = percolator.calc_p_wrapping_inverted(
-        plist, samples=samples,
-        save_discrete=save_raw,
-        initial_occupations=occupations)
-
-    fname = file_name + ".iwrap"
-    uprint(" Writing results to: {}\n".format(fname))
-
-    with open(fname, 'w') as f:
-        f.write("# {:^10s}   {:>10s}   {:>10s}\n".format(
-            "p", "P_iwrap(p)", "cumulative"))
-        for p in xrange(len(plist)):
-            f.write("  {:10.8f}   {:10.8f}   {:10.8f}\n".format(
-                plist[p], Q[p], Qc[p]))
-
-
-def calc_percolating_bonds(percolator, samples, save_raw, occupations,
-                           file_name):
-    plist = np.arange(0.01, 1.00, 0.01)
-    F_bonds = percolator.percolating_bonds(
-        plist, samples=samples,
-        save_discrete=save_raw,
-        initial_occupations=occupations)
-
-    fname = file_name + ".bonds"
-    uprint(" Writing results to: {}\n".format(fname))
-
-    with open(fname, 'w') as f:
-        f.write("# {:^10s}   {:>10s}\n".format(
-            "p", "F_bonds(p)"))
-        for p in xrange(len(plist)):
-            f.write("  {:10.8f}   {:10.8f}\n".format(
-                plist[p], F_bonds[p]))
-
-
-def calc_percolation_flux(percolator, samples, save_raw, occupations,
-                          file_name):
-    plist = np.arange(0.01, 1.00, 0.01)
-    flux = percolator.percolation_flux(
-        plist, samples=samples,
-        save_discrete=save_raw,
-        initial_occupations=occupations)
-
-    fname = file_name + ".flux"
-    uprint(" Writing results to: {}\n".format(fname))
-
-    with open(fname, 'w') as f:
-        f.write("# {:^10s}   {:>10s}\n".format(
-            "p", "F_bonds(p)"))
-        for p in xrange(len(plist)):
-            f.write("  {:10.8f}   {:10.8f}\n".format(
-                plist[p], flux[p]))
-
-
-def calc_inaccessible_sites(percolator, samples, save_raw, occupations,
-                            file_name):
+def calc_inaccessible_sites(percolator, samples, save_raw, file_name,
+                            sequence, species):
     plist = np.arange(0.01, 1.00, 0.01)
     (F_inacc, nclus) = percolator.inaccessible_sites(
-        plist, samples=samples,
-        save_discrete=save_raw,
-        initial_occupations=occupations)
+        plist, sequence, species, samples=samples,
+        save_discrete=save_raw)
 
     fname = file_name + ".inacc"
     uprint(" Writing results to: {}\n".format(fname))
@@ -173,75 +112,60 @@ def calc_inaccessible_sites(percolator, samples, save_raw, occupations,
                 plist[p], F_inacc[p], nclus[p]))
 
 
-def compute_percolation(poscarfile, samples, save_clusters=False,
-                        save_raw=False, file_name="percol.out",
-                        pc=False, check=False, r_NN=None, pinf=False,
-                        pwrap=False, piwrap=False, bonds=False, flux=False,
-                        inaccessible=False, supercell=[1, 1, 1],
-                        common=0, same=None, require_NN=False,
-                        occupations=False):
+def compute_percolation(input_file, samples, save_clusters, save_raw,
+                        file_name, pc, check, pinf, pwrap, inaccessible,
+                        supercell):
 
-    if not (check or pc or pinf or pwrap or piwrap or bonds or flux or
-            inaccessible):
+    if not (check or pc or pinf or pwrap or inaccessible):
         print("\n Nothing to do.")
         print(" Please specify the quantity to be calculated.")
         print(" Use the `--help' flag to list all options.\n")
         sys.exit()
 
-    uprint("\n Reading structure from file '{}'...".format(poscarfile), end="")
-    struc = Poscar.from_file(poscarfile).structure
+    uprint("\n Parsing input file '{}'...".format(input_file), end="")
+    inp = Input.from_file(input_file)
     uprint(" done.")
 
     uprint("\n Setting up lattice and neighbor lists...", end="")
-    lattice = Lattice.from_structure(struc, supercell=supercell, NN_range=r_NN)
+    lattice = Lattice.from_structure(
+        inp.mg_structure, supercell=supercell, NN_range=inp.cutoff,
+        site_labels=inp.site_labels,
+        occupying_species=inp.percolating_species,
+        static_species=inp.static_species,
+        concentrations=inp.initial_occupancy,
+        formula_units=inp.formula_units)
     uprint(" done.")
     uprint(" Initial site occupations taken from structure file.")
-    if occupations:
-        uprint(" These occupations will be used, but in random order.")
-    print(lattice)
+    uprint(lattice)
 
     uprint(" Initializing percolator...", end="")
-    percolator = Percolator(lattice)
+    percolator = Percolator(lattice,
+                            percolating_species=inp.percolating_species,
+                            static_species=inp.static_species,
+                            initial_concentrations=inp.initial_occupancy)
     uprint(" done.")
 
-    if (common > 0) or same:
-        uprint(" Using percolation rule with "
-               "{} common neighbor(s).".format(common))
-        if require_NN:
-            uprint(" Require the common neighbors to be "
-                   "themselves nearest neighbors.")
-        uprint(" Require same coordinate: {}".format(same))
-        if piwrap:
-            uprint(" Using inverted percolation rules.")
-        percolator.set_special_percolation_rule(
-            num_common=common, same=same, require_NN=require_NN,
-            inverse=piwrap)
+    percolator.set_complex_percolation_rule(
+        site_rules=inp.sublattices, bond_rules=inp.bonds, verbose=True)
 
     uprint("\n MC percolation simulation\n -------------------------\n")
 
+    # always use initial occaptions
     if check:  # check, if initial structure is percolating
         check_if_percolating(percolator)
     if pc:  # calculate critical site concentrations
         calc_critical_concentration(percolator, save_clusters, samples,
-                                    file_name, occupations)
+                                    file_name, inp.flip_sequence)
     if pinf:  # estimate P_infinity(p)
-        calc_p_infinity(percolator, samples, save_raw, occupations,
-                        file_name)
+        calc_p_infinity(percolator, samples, save_raw, file_name,
+                        inp.flip_sequence)
     if pwrap:  # estimate P_wrapping(p)
-        calc_p_wrapping(percolator, samples, save_raw, occupations,
-                        file_name)
-    if piwrap:  # estimate inverse P_wrapping(p)
-        calc_inverse_p_wrapping(percolator, samples, save_raw, occupations,
-                                file_name)
-    if bonds:  # fraction of percolating bonds
-        calc_percolating_bonds(percolator, samples, save_raw, occupations,
-                               file_name)
-    if flux:  # percolation flux
-        calc_percolation_flux(percolator, samples, save_raw, occupations,
-                              file_name)
-    if inaccessible:  # fraction of inaccessible sites
-        calc_inaccessible_sites(percolator, samples, save_raw, occupations,
-                                file_name)
+        calc_p_wrapping(percolator, samples, save_raw, file_name,
+                        inp.flip_sequence)
+    if inaccessible is not None:  # fraction of inaccessible sites
+        calc_inaccessible_sites(percolator, samples, save_raw,
+                                file_name, inp.flip_sequence,
+                                inaccessible)
 
     dt = time.gmtime(time.clock())
     uprint(" All done.  Elapsed CPU time: {:02d}h{:02d}m{:02d}s\n".format(
@@ -253,10 +177,8 @@ if (__name__ == "__main__"):
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument(
-        "structure",
-        help="structure in VASP's extended POSCAR format",
-        default="POSCAR",
-        nargs="?")
+        "input_file",
+        help="Input file in JSON format")
 
     parser.add_argument(
         "--supercell",
@@ -267,25 +189,12 @@ if (__name__ == "__main__"):
         nargs="+")
 
     parser.add_argument(
-        "--NN-range",
-        help="longest expected distance in 1st NN shell.",
-        type=float,
-        default=None)
-
-    parser.add_argument(
-        "--bonds", "-b",
-        help="Calculate fraction of percolating bonds",
-        action="store_true")
-
-    parser.add_argument(
-        "--flux", "-f",
-        help="Calculate percolation flux",
-        action="store_true")
-
-    parser.add_argument(
         "--inaccessible", "-i",
-        help="Calculate fraction of inaccessible sites",
-        action="store_true")
+        help="Calculate fraction of inaccessible sites for given "
+             "reference species",
+        type=str,
+        default=None,
+        metavar="SPECIES")
 
     parser.add_argument(
         "--pc", "-p",
@@ -308,40 +217,10 @@ if (__name__ == "__main__"):
         action="store_true")
 
     parser.add_argument(
-        "--piwrap",
-        help="Estimate inverse P_wrap(p) by subsequent removal of sites.",
-        action="store_true")
-
-    parser.add_argument(
         "--samples",
         help="number of samples to be averaged",
         type=int,
         default=500)
-
-    parser.add_argument(
-        "--common",
-        help="Number of common neighbors for two sites to be percolating.",
-        type=int,
-        default=0)
-
-    parser.add_argument(
-        "--same",
-        help="Require bonding sites to have the same coordinate in "
-             "direction 0, 1, or 2.",
-        type=int,
-        default=None)
-
-    parser.add_argument(
-        "--require-NN",
-        help="Require the comon NNs (defined by using the --common flag) "
-             "to be themselves nearest neighbors.",
-        action="store_true",
-        dest="require_NN")
-
-    parser.add_argument(
-        "--use-occupations",
-        help="Use the (randomized) occupations of the initial structure.",
-        action="store_true")
 
     parser.add_argument(
         "--file-name",
@@ -368,22 +247,14 @@ if (__name__ == "__main__"):
     if args.debug:
         np.random.seed(seed=1)
 
-    compute_percolation(poscarfile=args.structure,
+    compute_percolation(input_file=args.input_file,
                         samples=args.samples,
                         save_clusters=args.save_clusters,
                         save_raw=args.save_raw,
                         file_name=args.file_name,
                         pc=args.pc,
                         check=args.check,
-                        r_NN=args.NN_range,
                         pinf=args.pinf,
                         pwrap=args.pwrap,
-                        piwrap=args.piwrap,
-                        bonds=args.bonds,
-                        flux=args.flux,
                         inaccessible=args.inaccessible,
-                        supercell=args.supercell,
-                        common=args.common,
-                        same=args.same,
-                        require_NN=args.require_NN,
-                        occupations=args.use_occupations)
+                        supercell=args.supercell)
