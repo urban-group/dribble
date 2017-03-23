@@ -123,7 +123,8 @@ class NeighborList(object):
         return nbl
 
     def __str__(self):
-        ostr = "\n Instance of the NeighborList class\n\n"
+        ostr = "\n Neighbor List\n"
+        ostr += " -------------\n\n"
         if self._range:
             ostr += " interaction range          : {}\n".format(self._range)
         else:
