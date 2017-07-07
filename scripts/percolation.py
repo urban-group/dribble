@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 import sys
@@ -6,6 +6,7 @@ import time
 
 import numpy as np
 
+import percol
 from percol.io import Input
 
 try:

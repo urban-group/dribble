@@ -3,11 +3,11 @@ A class to represent lattices.
 
 """
 
-from __future__ import print_function
+from __future__ import print_function, division, unicode_literals
 
 import numpy as np
 
-from percol.pynblist import NeighborList
+from percol.nblist import NeighborList
 
 __author__ = "Alexander Urban"
 __date__ = "2013-02-15"
@@ -97,9 +97,9 @@ class Lattice(object):
             else:
                 species_i = None
             static_i = (species_i in static_species)
-            for ix in xrange(supercell[0]):
-                for iy in xrange(supercell[1]):
-                    for iz in xrange(supercell[2]):
+            for ix in range(supercell[0]):
+                for iy in range(supercell[1]):
+                    for iz in range(supercell[2]):
                         self._coo.append((coo + [ix, iy, iz]) /
                                          np.array(supercell, dtype=np.float64))
                         self._occup.append(Oi)
@@ -418,7 +418,7 @@ class Lattice(object):
         N_nnn = np.empty(self._nsites, dtype=int)
 
         pbcdist = self._nblist.get_pbc_distances_and_translations
-        for i in xrange(self._nsites):
+        for i in range(self._nsites):
             nn_i = self._nn[i]
             nnnb = set([])
             for j in nn_i:
@@ -431,7 +431,7 @@ class Lattice(object):
             T_nnn_i = []
             for j in nnnb:
                 (dist, Tvec) = pbcdist(i, j)
-                for k in xrange(len(dist)):
+                for k in range(len(dist)):
                     if (dist[k] < dmin - dr):
                         nnn_i = [j]
                         T_nnn_i = [Tvec[k]]
@@ -511,7 +511,7 @@ class Lattice(object):
         nblist = NeighborList(self._coo, lattice_vectors=self._avec,
                               interaction_range=r_NN, tolerance=dr)
 
-        for i in xrange(self._nsites):
+        for i in range(self._nsites):
             if r_NN:
                 (nbl, dist, T) = nblist.get_neighbors_and_distances(i, dr=dr)
             else:

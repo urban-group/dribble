@@ -8,7 +8,7 @@ from percol.percolator import Percolator
 from percol.ising import IsingModel
 from percol.lattice import Lattice
 
-import aux
+from . import aux, io
 
 
 __author__ = "Alexander Urban"

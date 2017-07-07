@@ -3,10 +3,9 @@ Particle neighbor list.
 
 """
 
-from __future__ import print_function
+from __future__ import print_function, division, unicode_literals
 
 import numpy as np
-# from pytiming import timing
 
 __author__ = "Alexander Urban"
 __date__ = "2013-01-19"

@@ -20,7 +20,7 @@
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from __future__ import print_function
+from __future__ import print_function, division, unicode_literals
 
 import numpy as np
 import sys
@@ -31,8 +31,6 @@ from scipy.stats import binom
 from percol.aux import uprint
 from percol.aux import ProgressBar
 from percol.lattice import Lattice
-
-import json
 
 __autor__ = "Alexander Urban"
 __date__ = "2013-02-15"
@@ -313,7 +311,7 @@ class Percolator(object):
         nspanning = np.array([0, 0, 0], dtype=int)
         newsites = [site]
 
-        for i in xrange(len(self._neighbors[site])):
+        for i in range(len(self._neighbors[site])):
             nb = self._neighbors[site][i]
             # neighboring site occupied and bound?
             if ((self._cluster[nb] >= 0) and self._check_special(site, nb)):
@@ -343,7 +341,7 @@ class Percolator(object):
         visited = []
         nspanning = 0
 
-        for i in xrange(self._nsites):
+        for i in range(self._nsites):
             if (self._cluster[i] > 0) and not (i in visited):
                 (cluster, spanning) = self.get_cluster_of_site(i)
                 visited += cluster
@@ -657,11 +655,11 @@ class Percolator(object):
         for initial, final in sequence:
             num_active_sites += len(self._lattice.sites_of_species(initial))
 
-        Pn = np.zeros(num_active_sites)
-        Xn = np.zeros(num_active_sites)
+        Pn = [0 for i in range(num_active_sites)]
+        Xn = [0 for i in range(num_active_sites)]
         w = 1.0/float(samples)
         w2 = w*float(num_active_sites)
-        for i in xrange(samples):
+        for i in range(samples):
             pb()
             self.reset()
             flip_list = []
@@ -669,13 +667,20 @@ class Percolator(object):
                 sites = self._lattice.sites_of_species(initial)
                 np.random.shuffle(sites)
                 flip_list += [(s, final) for s in sites]
+            if len(flip_list) > num_active_sites:
+                for n in range(len(flip_list)-num_active_sites):
+                    Pn.append(0)
+                    Xn.append(0)
+                num_active_sites = len(flip_list)
             for n, (site, species) in enumerate(flip_list):
                 self.add_percolating_site(site=site, species=species)
                 Pn[n] += w*(float(self._size[self._largest])/float(n+1))
-                for cl in xrange(len(self._size)):
+                for cl in range(len(self._size)):
                     if cl == self._largest:
                         continue
                     Xn[n] += w2*self._size[cl]**2/float(n+1)
+        Pn = np.array(Pn)
+        Xn = np.array(Xn)
 
         pb()
 
@@ -683,7 +688,7 @@ class Percolator(object):
             fname = 'discrete.dat'
             uprint(" Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
-                for n in xrange(num_active_sites):
+                for n in range(num_active_sites):
                     f.write("{} {} {}\n".format(n+1, Pn[n], Xn[n]))
 
         uprint(" Return convolution with a binomial distribution.\n")
@@ -691,7 +696,7 @@ class Percolator(object):
         nlist = np.arange(1, num_active_sites+1, dtype=int)
         Pp = np.empty(len(plist))
         Xp = np.empty(len(plist))
-        for i in xrange(len(plist)):
+        for i in range(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, num_active_sites, plist[i])*Pn)
             Xp[i] = np.sum(binom.pmf(nlist, num_active_sites, plist[i])*Xn)
 
@@ -730,11 +735,11 @@ class Percolator(object):
         for initial, final in sequence:
             num_active_sites += len(self._lattice.sites_of_species(initial))
 
-        Pn = np.zeros(num_active_sites)
-        Pnc = np.zeros(num_active_sites)
+        Pn = [0 for i in range(num_active_sites)]
+        Pnc = [0 for i in range(num_active_sites)]
         w = 1.0/float(samples)
         w2 = w*(num_active_sites)
-        for i in xrange(samples):
+        for i in range(samples):
             pb()
             self.reset()
             flip_list = []
@@ -742,6 +747,11 @@ class Percolator(object):
                 sites = self._lattice.sites_of_species(initial)
                 np.random.shuffle(sites)
                 flip_list += [(s, final) for s in sites]
+            if len(flip_list) > num_active_sites:
+                for n in range(len(flip_list)-num_active_sites):
+                    Pn.append(0)
+                    Pnc.append(0)
+                num_active_sites = len(flip_list)
             for n, (site, species) in enumerate(flip_list):
                 self.add_percolating_site(site=site, species=species)
                 wrapping = np.sum(self._is_wrapping[self._largest])
@@ -749,6 +759,8 @@ class Percolator(object):
                     Pnc[n:] += w
                     Pn[n] += w2
                     break
+        Pn = np.array(Pn)
+        Pnc = np.array(Pnc)
 
         pb()
 
@@ -756,7 +768,7 @@ class Percolator(object):
             fname = 'discrete-wrap.dat'
             uprint("Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
-                for n in xrange(num_active_sites):
+                for n in range(num_active_sites):
                     f.write("{} {}\n".format(n+1, Pn[n]))
 
         uprint(" Return convolution with a binomial distribution.\n")
@@ -764,7 +776,7 @@ class Percolator(object):
         nlist = np.arange(1, num_active_sites+1, dtype=int)
         Pp = np.empty(len(plist))
         Ppc = np.empty(len(plist))
-        for i in xrange(len(plist)):
+        for i in range(len(plist)):
             Pp[i] = np.sum(binom.pmf(
                 nlist, num_active_sites, plist[i])*Pn)
             Ppc[i] = np.sum(binom.pmf(
@@ -807,10 +819,10 @@ class Percolator(object):
         for initial, final in sequence:
             num_active_sites += len(self._lattice.sites_of_species(initial))
 
-        Pn = np.zeros(num_active_sites)
-        Qn = np.zeros(num_active_sites)
+        Pn = [0 for i in range(num_active_sites)]
+        Qn = [0 for i in range(num_active_sites)]
         w = 1.0/float(samples)
-        for i in xrange(samples):
+        for i in range(samples):
             pb()
             self.reset()
             flip_list = []
@@ -818,6 +830,11 @@ class Percolator(object):
                 sites = self._lattice.sites_of_species(initial)
                 np.random.shuffle(sites)
                 flip_list += [(s, final) for s in sites]
+            if len(flip_list) > num_active_sites:
+                for n in range(len(flip_list)-num_active_sites):
+                    Pn.append(0)
+                    Qn.append(0)
+                num_active_sites = len(flip_list)
             for n, (site, species) in enumerate(flip_list):
                 self.add_percolating_site(site=site, species=species)
                 N_ref = len(self._lattice.sites_of_species(species))
@@ -828,6 +845,8 @@ class Percolator(object):
                 Pn[n] += w*float(N_ref - N_ref_percol)/float(N_ref)
                 # Pn[n] += w*float(n+1-self._npercolating)/float(n+1)
                 Qn[n] += w*float(self._nclus_percol)/float(self._nclusters)
+        Pn = np.array(Pn)
+        Qn = np.array(Qn)
 
         pb()
 
@@ -835,7 +854,7 @@ class Percolator(object):
             fname = 'discrete-inaccessible.dat'
             uprint(" Saving discrete data to file: {}".format(fname))
             with open(fname, "w") as f:
-                for n in xrange(num_active_sites):
+                for n in range(num_active_sites):
                     f.write("{} {} {}\n".format(n+1, Pn[n], Qn[n]))
 
         uprint(" Return convolution with a binomial distribution.\n")
@@ -843,73 +862,11 @@ class Percolator(object):
         nlist = np.arange(1, num_active_sites+1, dtype=int)
         Pp = np.empty(len(plist))
         Qp = np.empty(len(plist))
-        for i in xrange(len(plist)):
+        for i in range(len(plist)):
             Pp[i] = np.sum(binom.pmf(nlist, num_active_sites, plist[i])*Pn)
             Qp[i] = np.sum(binom.pmf(nlist, num_active_sites, plist[i])*Qn)
 
         return (Pp, Qp)
-
-    def percolation_flux(self, plist, samples=500, save_discrete=False,
-                         initial_occupations=False):
-        """
-        Estimate the ratio of percolation pathes over all possible
-        cell boundary sites.
-
-        Arguments:
-          plist          list with desired probability points p; 0 < p < 1
-          samples        number of samples to average the MC result over
-          save_discrete  if True, save the discrete, supercell dependent
-                         values as well (file: discrete-wrap.dat)
-
-        Returns:
-          list of values corresponding to probabilities in `plist'
-        """
-
-        uprint(" Calculating percolation flux.")
-        uprint(" Averaging over {} samples:\n".format(samples))
-
-        A = self.compute_surface_area(self._avec)
-
-        pb = ProgressBar(samples)
-
-        # remember initial occupations, if desired
-        if initial_occupations:
-            occup0 = self._occupied_not_static[:]
-        else:
-            occup0 = []
-        nocc = len(occup0)
-
-        Pn = np.zeros(self.num_sites_not_static)
-        w = 1.0/float(samples)/A
-        for i in xrange(samples):
-            pb()
-            self.reset()
-            np.random.shuffle(occup0)
-            for n in xrange(self.num_sites_not_static):
-                if n < nocc:
-                    self.add_percolating_site(site=occup0[n])
-                else:
-                    self.add_percolating_site()
-                Pn[n] += w*self._npaths
-
-        pb()
-
-        if save_discrete:
-            fname = 'discrete-flux.dat'
-            uprint("Saving discrete data to file: {}".format(fname))
-            with open(fname, "w") as f:
-                for n in xrange(self.num_sites_not_static):
-                    f.write("{} {}\n".format(n+1, Pn[n]))
-
-        uprint(" Return convolution with a binomial distribution.\n")
-
-        nlist = np.arange(1, self.num_sites_not_static+1, dtype=int)
-        Pp = np.empty(len(plist))
-        for i in xrange(len(plist)):
-            Pp[i] = np.sum(binom.pmf(
-                nlist, self.num_sites_not_static, plist[i])*Pn)
-
-        return Pp
 
     def percolation_point(self, sequence, samples=500, file_name=None):
         """
@@ -947,7 +904,7 @@ class Percolator(object):
         percolating_composition = {s: 0.0 for s in comp}
         w = 1.0/float(samples)
         w2 = w/float(self._nbonds_tot)
-        for i in xrange(samples):
+        for i in range(samples):
             pb()
             self.reset()
             flip_list = []
