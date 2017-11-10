@@ -6,17 +6,9 @@ import time
 
 import numpy as np
 
-import percol
 from percol.io import Input
-
-try:
-    from pymatgen.io.vasp import Poscar
-except ImportError:
-    print("Unable to load the `pymatgen' module.")
-    sys.exit()
-
-from percol import Percolator
-from percol import Lattice
+from percol.percolator import Percolator
+from percol.lattice import Lattice
 from percol.aux import uprint
 
 __author__ = "Alexander Urban"
@@ -73,7 +65,7 @@ def calc_p_infinity(percolator, samples, save_raw, file_name, sequence):
     with open(fname, 'w') as f:
         f.write("# {:^10s}   {:>10s}   {:>15s}   {:>15s}\n".format(
             "p", "P_infty(p)", "Chi(p)", "normalized"))
-        for p in xrange(len(plist)):
+        for p in range(len(plist)):
             f.write("  {:10.8f}   {:10.8f}   {:15.8f}   {:15.8f}\n".format(
                 plist[p], Q[p], X[p], X[p]/intX))
 
@@ -90,7 +82,7 @@ def calc_p_wrapping(percolator, samples, save_raw, file_name, sequence):
     with open(fname, 'w') as f:
         f.write("# {:^10s}   {:>10s}   {:>10s}\n".format(
             "p", "P_wrap(p)", "cumulative"))
-        for p in xrange(len(plist)):
+        for p in range(len(plist)):
             f.write("  {:10.8f}   {:10.8f}   {:10.8f}\n".format(
                 plist[p], Q[p], Qc[p]))
 
@@ -108,14 +100,14 @@ def calc_inaccessible_sites(percolator, samples, save_raw, file_name,
     with open(fname, 'w') as f:
         f.write("# {:^10s}   {:>10s}   {:>10s}\n".format(
             "p", "F_inacc(p)", "N_percol(p)"))
-        for p in xrange(len(plist)):
+        for p in range(len(plist)):
             f.write("  {:10.8f}   {:10.8f}   {:12.6f}\n".format(
                 plist[p], F_inacc[p], nclus[p]))
 
 
-def compute_percolation(input_file, samples, save_clusters, save_raw,
-                        file_name, pc, check, pinf, pwrap, inaccessible,
-                        supercell):
+def compute_percolation(input_file, structure_file, samples,
+                        save_clusters, save_raw, file_name, pc, check,
+                        pinf, pwrap, inaccessible, supercell):
 
     if not (check or pc or pinf or pwrap or inaccessible):
         print("\n Nothing to do.")
@@ -123,31 +115,23 @@ def compute_percolation(input_file, samples, save_clusters, save_raw,
         print(" Use the `--help' flag to list all options.\n")
         sys.exit()
 
+    input_params = {}
+    if structure_file is not None:
+        uprint("\n Reading structure from file: {}".format(structure_file))
+        input_params['structure'] = structure_file
+
     uprint("\n Parsing input file '{}'...".format(input_file), end="")
-    inp = Input.from_file(input_file)
+    inp = Input.from_file(input_file, **input_params)
     uprint(" done.")
 
     uprint("\n Setting up lattice and neighbor lists...", end="")
-    lattice = Lattice.from_structure(
-        inp.mg_structure, supercell=supercell, NN_range=inp.cutoff,
-        site_labels=inp.site_labels,
-        occupying_species=inp.percolating_species,
-        static_species=inp.static_species,
-        concentrations=inp.initial_occupancy,
-        formula_units=inp.formula_units)
+    lattice = Lattice.from_input_object(inp, supercell=supercell)
     uprint(" done.")
-    uprint(" Initial site occupations taken from structure file.")
     uprint(lattice)
 
     uprint(" Initializing percolator...", end="")
-    percolator = Percolator(lattice,
-                            percolating_species=inp.percolating_species,
-                            static_species=inp.static_species,
-                            initial_concentrations=inp.initial_occupancy)
+    percolator = Percolator.from_input_object(inp, lattice, verbose=True)
     uprint(" done.")
-
-    percolator.set_complex_percolation_rule(
-        site_rules=inp.sublattices, bond_rules=inp.bonds, verbose=True)
 
     uprint("\n MC percolation simulation\n -------------------------\n")
 
@@ -173,8 +157,7 @@ def compute_percolation(input_file, samples, save_clusters, save_raw,
             dt.tm_hour, dt.tm_min, dt.tm_sec))
 
 
-if (__name__ == "__main__"):
-
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument(
@@ -182,12 +165,18 @@ if (__name__ == "__main__"):
         help="Input file in JSON format")
 
     parser.add_argument(
+        "structure_file",
+        help="Input file in JSON format",
+        default=None,
+        nargs="?")
+
+    parser.add_argument(
         "--supercell",
         help="List of multiples of the lattice cell" +
              " in the three lattice directions",
         type=int,
         default=(1, 1, 1),
-        nargs="+")
+        nargs=3)
 
     parser.add_argument(
         "--inaccessible", "-i",
@@ -249,6 +238,7 @@ if (__name__ == "__main__"):
         np.random.seed(seed=1)
 
     compute_percolation(input_file=args.input_file,
+                        structure_file=args.structure_file,
                         samples=args.samples,
                         save_clusters=args.save_clusters,
                         save_raw=args.save_raw,
@@ -259,3 +249,7 @@ if (__name__ == "__main__"):
                         pwrap=args.pwrap,
                         inaccessible=args.inaccessible,
                         supercell=args.supercell)
+
+
+if (__name__ == "__main__"):
+    main()

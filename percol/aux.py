@@ -62,7 +62,7 @@ class ProgressBar(object):
             return
 
         if (self._count % self._nprint == 0):
-            uprint(self._nchar*self._char.encode("utf-8"), end="")
+            uprint(self._nchar*self._char, end="")
 
 
 def sigmoidal1(x, x0, y0, A, c):

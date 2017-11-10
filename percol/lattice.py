@@ -15,7 +15,7 @@ __date__ = "2013-02-15"
 
 class Lattice(object):
 
-    def __init__(self, lattice_vectors, frac_coords, decoration=None,
+    def __init__(self, lattice_vectors, frac_coords,
                  supercell=(1, 1, 1), NN_range=None, site_labels=None,
                  species=None, occupying_species=[], static_species=[],
                  concentrations=None, formula_units=1):
@@ -24,9 +24,6 @@ class Lattice(object):
           lattice_vectors    3x3 matrix with lattice vectors in rows
           frac_coords        Nx3 array; fractional coordinates of the
                              N lattice sites
-          decoration[i]      initial occupation O of site i (corresponding to
-                             frac_coords[i]);
-                             O > 0 --> occupied; O < 0 --> vacant
           supercell          list of multiples of the cell in the three
                              spacial directions
           NN_range           cutoff to be used for nearest-neighbor detection
@@ -74,8 +71,8 @@ class Lattice(object):
         self._occup = []
         self._occupied = []
         self._vacant = []
-        self._site_labels = []
-        self._species = []
+        self.site_labels = []
+        self.species = []
         self._static = []
 
         self.num_formula_units = formula_units
@@ -84,10 +81,6 @@ class Lattice(object):
         isite = 0
         for i in range(len(frac_coords)):
             coo = np.array(frac_coords[i])
-            if decoration is not None:
-                Oi = decoration[i]
-            else:
-                Oi = -1
             if site_labels is not None:
                 label_i = site_labels[i]
             else:
@@ -96,6 +89,10 @@ class Lattice(object):
                 species_i = species[i]
             else:
                 species_i = None
+            if species_i in occupying_species:
+                Oi = 1
+            else:
+                Oi = -1
             static_i = (species_i in static_species)
             for ix in range(supercell[0]):
                 for iy in range(supercell[1]):
@@ -103,8 +100,8 @@ class Lattice(object):
                         self._coo.append((coo + [ix, iy, iz]) /
                                          np.array(supercell, dtype=np.float64))
                         self._occup.append(Oi)
-                        self._site_labels.append(label_i)
-                        self._species.append(species_i)
+                        self.site_labels.append(label_i)
+                        self.species.append(species_i)
                         if (Oi > 0):
                             self._occupied.append(isite)
                         else:
@@ -147,7 +144,7 @@ class Lattice(object):
     def from_structure(cls, structure, site_labels=None, **kwargs):
         """
         Create a Lattice instance based on the lattice vectors
-        defined in a `structure' object (pymatgen.core.structure).
+        defined in a `Structure' object (pymatgen.core.structure).
 
         Arguments:
 
@@ -161,11 +158,35 @@ class Lattice(object):
 
         avec = structure.lattice.matrix
         coo = structure.frac_coords
+        species = np.array([s.specie.symbol for s in structure])
         if site_labels is None:
-            site_labels = np.array([s.symbol for s in structure.species])
+            site_labels = species.copy()
 
-        lattice = cls(avec, coo, site_labels=site_labels, **kwargs)
+        lattice = cls(avec, coo, species=species,
+                      site_labels=site_labels, **kwargs)
 
+        return lattice
+
+    @classmethod
+    def from_input_object(cls, inp, **kwargs):
+        """
+        Create a Lattice instance based on data in an Input Parameters object.
+
+        Arguments:
+
+          inp (percol.input.Input): Input Parameters object
+
+        """
+
+        lattice = cls.from_structure(
+            inp.structure,
+            NN_range=inp.cutoff,
+            site_labels=inp.site_labels,
+            occupying_species=inp.percolating_species,
+            static_species=inp.static_species,
+            concentrations=inp.initial_occupancy,
+            formula_units=inp.formula_units,
+            **kwargs)
         return lattice
 
     def __repr__(self):
@@ -275,7 +296,7 @@ class Lattice(object):
           sl    "site label" of the sublattice
 
         """
-        return [i for i in range(self.num_sites) if self._site_labels[i] == sl]
+        return [i for i in range(self.num_sites) if self.site_labels[i] == sl]
 
     @property
     def species_list(self):
@@ -283,7 +304,7 @@ class Lattice(object):
         Return list of all species on the lattice.
 
         """
-        return list(set(self._species))
+        return list(set(self.species))
 
     def sites_of_species(self, species):
         """
@@ -294,7 +315,7 @@ class Lattice(object):
 
         """
         return [i for i in range(self.num_sites)
-                if self._species[i] == species]
+                if self.species[i] == species]
 
     def concentration(self, species):
         """
@@ -351,7 +372,7 @@ class Lattice(object):
 
         idx = np.random.permutation(self._nsites)
         self._occupied = []
-        self._vacant = range(self._nsites)
+        self._vacant = list(range(self._nsites))
         for i in range(N):
             self._occupied.append(idx[i])
             del self._vacant[self._vacant.index(idx[i])]
@@ -380,10 +401,10 @@ class Lattice(object):
         """
 
         self._occupied = []
-        self._vacant = range(self._nsites)
+        self._vacant = list(range(self._nsites))
         self._occup[:] = -1
         self._static = []
-        self._species[:] = [None for i in range(self._nsites)]
+        self.species[:] = [None for i in range(self._nsites)]
 
         for sl in concentrations:
             sites = self.sublattice(sl)
@@ -399,7 +420,7 @@ class Lattice(object):
                 decoration = decoration[:-1]
             decoration = np.random.permutation(decoration)
             for i, s in enumerate(sites):
-                self._species[s] = decoration[i]
+                self.species[s] = decoration[i]
                 if decoration[i] in occupying_species:
                     self._occupied.append(s)
                     del self._vacant[self._vacant.index(s)]
@@ -485,10 +506,10 @@ class Lattice(object):
 
         dNN = np.empty(self._nsites)
         N_nn = np.empty(self._nsites, dtype=int)
-        nbs = range(self._nsites)
-        nbshells = range(self._nsites)
-        nbshelldist = range(self._nsites)
-        Tvecs = range(self._nsites)
+        nbs = list(range(self._nsites))
+        nbshells = list(range(self._nsites))
+        nbshelldist = list(range(self._nsites))
+        Tvecs = list(range(self._nsites))
 
         def neighbor_shells(dist, nbl):
             """ Sort neighbors by shells. """
@@ -537,7 +558,7 @@ class Lattice(object):
             self._N_nn = N_nn
 
 
-if (__name__ == "__main__"):  # {{{ unit test
+if (__name__ == "__main__"):
 
     print("\n FCC 4x4x4 cell (64 sites)")
 

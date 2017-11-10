@@ -5,7 +5,10 @@ Parse JSON input files with percolation rules, site labels, etc.
 
 from __future__ import print_function, division, unicode_literals
 import json
-import numpy as np
+from pymatgen.io.vasp import Poscar
+from pymatgen import Structure
+
+from percol.sublattice import Sublattice, Bond
 
 __author__ = "Alexander Urban"
 __email__ = "aurban@lbl.gov"
@@ -67,50 +70,71 @@ class Input(object):
 
     """
 
-    def __init__(self, input_dict):
+    def __init__(self, structure=None, percolating_species=None,
+                 cutoff=None, static_species=None, flip_sequence=None,
+                 formula_units=1, sublattices=None, bonds=None,
+                 **kwargs):
         """
         Args:
-           input_dict  dictionary with input instructions
+          The constructor takes as arguments the same keys expected in
+          the JSON input file (doc object doc string).
 
         """
 
-        self.input_dict = input_dict
+        self.input_dict = kwargs
 
-        if "structure" in self.input_dict:
-            self.structure_path = self.input_dict["structure"]
-        else:
+        if structure is None:
             raise KeyError("No structure file specified.")
-        if "percolating_species" in self.input_dict:
-            self.percolating_species = self.input_dict["percolating_species"]
         else:
+            self.structure_path = structure
+            self.input_structure = Poscar.from_file(
+                self.structure_path).structure
+
+        if percolating_species is None:
             raise KeyError("No percolating species specified.")
+        else:
+            self.percolating_species = percolating_species
 
-        self.cutoff = None
+        self.cutoff = cutoff
+        self.static_species = [] if static_species is None else static_species
+        self.flip_sequence = [] if flip_sequence is None else flip_sequence
+        self.formula_units = formula_units
+
         self.sublattices = {}
-        self.bonds = {}
-        self.static_species = []
-        self.initial_occupancy = {}
-        self.flip_sequence = []
-        self.formula_units = 1
+        if sublattices is not None:
+            for sl in sublattices:
+                sl_dict = sublattices[sl]
+                self.sublattices[sl] = Sublattice(
+                    self.input_structure, **sl_dict)
 
-        if "cutoff" in self.input_dict:
-            self.cutoff = self.input_dict["cutoff"]
-        if "sublattices" in self.input_dict:
-            self.sublattices = self.input_dict["sublattices"]
-        if "bonds" in self.input_dict:
-            # bonds are "sets" as the order of sites does not matter
-            self.bonds = [set(b) for b in self.input_dict["bonds"]]
-        if "static_species" in self.input_dict:
-            self.static_species = self.input_dict["static_species"]
-        if "initial_occupancy" in self.input_dict:
-            self.initial_occupancy = self.input_dict["initial_occupancy"]
-        if "flip_sequence" in self.input_dict:
-            self.flip_sequence = self.input_dict["flip_sequence"]
-        if "formula_units" in self.input_dict:
-            self.formula_units = self.input_dict["formula_units"]
+        self.bonds = {}
+        if bonds is not None:
+            for b in bonds:
+                bond = Bond.from_dict(b)
+                # dictionary, so that the following syntax is valid:
+                # if Bond('A', 'B') in self.bonds:
+                #    rules = self.bonds[Bond('A', 'B')].bond_rules
+                self.bonds[bond] = bond
+
+        # reduce structure to sites only from sublattices that are not
+        # ignored
+        active_sites = []
+        for sl in self.sublattices:
+            if not self.sublattices[sl].ignore:
+                active_sites.extend(self.sublattices[sl].sites)
+        active_sites.sort()
+        self.structure = Structure.from_sites(
+            [self.input_structure[i] for i in active_sites])
+
+        # assign a sublattice label to each site in the reduced structure
+        self.site_labels = ["" for i in active_sites]
+        for sl in self.sublattices:
+            for s in self.sublattices[sl].sites:
+                if s in active_sites:
+                    self.site_labels[active_sites.index(s)] = sl
 
     @classmethod
-    def from_file(cls, json_file):
+    def from_file(cls, json_file, **kwargs):
         """
         Args:
           json_file   path or file object pointing to JSON input file
@@ -123,10 +147,11 @@ class Input(object):
         else:
             input_dict = json.load(json_file)
 
-        return cls(input_dict)
+        input_dict.update(kwargs)
+        return cls(**input_dict)
 
     @classmethod
-    def from_string(cls, json_string):
+    def from_string(cls, json_string, **kwargs):
         """
         Args:
           json_string   string containing JSON input
@@ -134,28 +159,38 @@ class Input(object):
         """
 
         input_dict = json.loads(json_string)
-        return cls(input_dict)
+        input_dict.update(kwargs)
+        return cls(**input_dict)
 
     def __str__(self):
-        return
+        out = "Percolation Simulation Input:"
+        out += "\n  Percolating species: " + ", ".join(
+            self.percolating_species)
+        out += "\n  Static species: " + ", ".join(self.static_species)
+        out += "\n  Cutoff: {}".format(self.cutoff)
+        out += "\n  Formula units: {}".format(self.formula_units)
+        out += "\n  Flip sequence: " + ", ".join(
+            ["{} --> {}".format(a, b) for a, b in self.flip_sequence])
+        out += "\n  Sublattices: " + ", ".join(
+            [s for s in self.sublattices])
+        out += "\n  Bonds: " + ", ".join(
+            [str(self.bonds[b]) for b in self.bonds])
+        return out
 
     @property
     def mg_structure(self):
-        from pymatgen.io.vasp import Poscar
-        return Poscar.from_file(self.structure_path).structure
+        warnings.warn("'mg_structure' has been depricated in favor of the "
+                      "'structure' attribute.",  DeprecationWarning)
+        return self.structure
 
     @property
-    def site_labels(self):
+    def initial_occupancy(self):
         """
-        List of sublattice labels for each site in the order of the input
-        structure.
+        Convenience property returning the initial occupancies of all
+        sublattices.
 
         """
-        sites = []
-        labels = []
-        for s in self.sublattices:
-            s_sites = self.sublattices[s]["sites"]
-            sites += s_sites[:]
-            labels += [s for i in s_sites]
-        idx = np.argsort(sites)
-        return [labels[i] for i in idx]
+        occup_dict = {sl: self.sublattices[sl].initial_occupancy
+                      for sl in self.sublattices
+                      if self.sublattices[sl].initial_occupancy is not None}
+        return None if occup_dict == {} else occup_dict
