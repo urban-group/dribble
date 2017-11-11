@@ -7,7 +7,7 @@ from __future__ import print_function, division, unicode_literals
 
 import numpy as np
 
-from percol.nblist import NeighborList
+from .nblist import NeighborList
 
 __author__ = "Alexander Urban"
 __date__ = "2013-02-15"

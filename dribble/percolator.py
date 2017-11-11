@@ -28,10 +28,10 @@ import sys
 from sys import stderr
 from scipy.stats import binom
 
-from percol.aux import uprint
-from percol.aux import ProgressBar
-from percol.lattice import Lattice
-from percol.sublattice import Bond
+from .aux import uprint
+from .aux import ProgressBar
+from .lattice import Lattice
+from .sublattice import Bond
 
 __autor__ = "Alexander Urban"
 __date__ = "2013-02-15"

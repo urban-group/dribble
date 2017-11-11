@@ -5,7 +5,7 @@ Object class to hold information about sub-lattices.
 
 from __future__ import print_function, division
 
-import percol.rules
+from . import rules
 
 __author__ = "Alexander Urban"
 __email__ = "aurban@lbl.gov"
@@ -27,7 +27,7 @@ class Bond(object):
         Arguments:
           sublattices (set or list): labels of the sublattices that the
             sites connected by the bond belong to.
-          bond_rules (list): list of bond rules (see percol.rules) that
+          bond_rules (list): list of bond rules (see rules.py) that
             have to be fulfilled for this bond to be percolating
 
         """
@@ -36,7 +36,7 @@ class Bond(object):
         self.bond_rules = []
         if bond_rules is not None:
             for br in bond_rules:
-                rule = getattr(percol.rules, br[0])
+                rule = getattr(rules, br[0])
                 args = br[1] if len(br) > 1 else {}
                 self.bond_rules.append(rule(**args))
 
@@ -96,7 +96,7 @@ class Sublattice(object):
             concentrations
           ignore (bool): if True, ignore this sublattice in percolation
             simulations
-          site_rules (list): a list of site rules (see percol.rules)
+          site_rules (list): a list of site rules (see rules.py)
             that have to be fulfilled for a site of the present sublattice
             can to become part of the percolating network.
 
@@ -108,7 +108,7 @@ class Sublattice(object):
         self.site_rules = []
         if site_rules is not None:
             for sr in site_rules:
-                rule = getattr(percol.rules, sr[0])
+                rule = getattr(rules, sr[0])
                 args = sr[1] if len(sr) > 1 else {}
                 self.site_rules.append(rule(**args))
 

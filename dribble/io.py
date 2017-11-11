@@ -8,7 +8,7 @@ import json
 from pymatgen.io.vasp import Poscar
 from pymatgen import Structure
 
-from percol.sublattice import Sublattice, Bond
+from .sublattice import Sublattice, Bond
 
 __author__ = "Alexander Urban"
 __email__ = "aurban@lbl.gov"
