@@ -1,0 +1,26 @@
+{
+    "structure": "LiMO2-rotated.vasp",
+    "formula_units": 1,
+    "sublattices": {
+        "O": {
+            "description": "octahedral site",
+            "sites": [1, 2],
+            "initial_occupancy": {"TM": 1.0}
+        },
+        "oxygen": {
+            "description": "oxygen sites",
+            "sites": {"species": ["O"]},
+            "ignore": true
+        }
+    },
+    "bonds": [
+        {
+            "sublattices": ["O", "O"],
+            "bond_rules": [
+                ["MinCommonNNNeighborsBR", {"num_neighbors": 2}]
+            ]
+        }
+    ],
+    "percolating_species": ["Li"],
+    "flip_sequence": [["TM", "Li"]]
+}
