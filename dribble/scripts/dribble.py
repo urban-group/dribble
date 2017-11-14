@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+Dribble - Percolation Simulation on Lattices
+
+Analyze the ionic percolation properties of an input structure.
+
+"""
 
 import argparse
 import sys
@@ -6,10 +12,10 @@ import time
 
 import numpy as np
 
-from percol.io import Input
-from percol.percolator import Percolator
-from percol.lattice import Lattice
-from percol.aux import uprint
+from dribble.io import Input
+from dribble.percolator import Percolator
+from dribble.lattice import Lattice
+from dribble.aux import uprint
 
 __author__ = "Alexander Urban"
 
@@ -158,7 +164,9 @@ def compute_percolation(input_file, structure_file, samples,
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument(
         "input_file",

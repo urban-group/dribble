@@ -3,18 +3,14 @@ Module with auxiliary functions.
 
 """
 
-from __future__ import print_function
+from __future__ import print_function, division, unicode_literals
 
 import sys
-import os
-
 import numpy as np
 
 
 __author__ = "Alexander Urban"
 __date__ = "2013-01-22"
-
-unbuffered = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
 
 def uprint(string, **kwargs):
@@ -25,7 +21,8 @@ def uprint(string, **kwargs):
     Note: the keyword argument `file' of the print function is
           not available (connected to stdout).
     """
-    print(string, file=unbuffered, **kwargs)
+    print(string, **kwargs)
+    sys.stdout.flush()
 
 
 class ProgressBar(object):
@@ -65,7 +62,7 @@ class ProgressBar(object):
             return
 
         if (self._count % self._nprint == 0):
-            uprint(self._nchar*self._char.encode("utf-8"), end="")
+            uprint(self._nchar*self._char, end="")
 
 
 def sigmoidal1(x, x0, y0, A, c):

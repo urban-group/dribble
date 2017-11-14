@@ -3,10 +3,9 @@ Particle neighbor list.
 
 """
 
-from __future__ import print_function
+from __future__ import print_function, division, unicode_literals
 
 import numpy as np
-# from pytiming import timing
 
 __author__ = "Alexander Urban"
 __date__ = "2013-01-19"
@@ -123,7 +122,8 @@ class NeighborList(object):
         return nbl
 
     def __str__(self):
-        ostr = "\n Instance of the NeighborList class\n\n"
+        ostr = "\n Neighbor List\n"
+        ostr += " -------------\n\n"
         if self._range:
             ostr += " interaction range          : {}\n".format(self._range)
         else:
