@@ -39,7 +39,7 @@ setup(
     ],
     keywords=['percolation', 'materials science', 'monte carlo'],
     packages=find_packages(exclude=['tests']),
-    install_requires=['numpy', 'scipy'],
+    install_requires=['numpy', 'scipy', 'pymatgen'],
     # package_data={
     #     'sample': [''],
     # },
