@@ -2,9 +2,9 @@
     "structure": "LiMO2-rotated.vasp",
     "formula_units": 1,
     "sublattices": {
-        "O": {
+        "oct": {
             "description": "octahedral site",
-            "sites": [1, 2],
+            "sites": {"species": ["Li", "Co"]},
             "initial_occupancy": {"TM": 1.0}
         },
         "oxygen": {
@@ -15,7 +15,7 @@
     },
     "bonds": [
         {
-            "sublattices": ["O", "O"],
+            "sublattices": ["oct", "oct"],
             "bond_rules": [
                 ["MinCommonNNNeighborsBR", {"num_neighbors": 2}]
             ]
