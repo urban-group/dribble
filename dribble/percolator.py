@@ -28,8 +28,8 @@ import sys
 from sys import stderr
 from scipy.stats import binom
 
-from .aux import uprint
-from .aux import ProgressBar
+from .misc import uprint
+from .misc import ProgressBar
 from .lattice import Lattice
 from .sublattice import Bond
 

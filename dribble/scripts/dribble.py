@@ -15,7 +15,7 @@ import numpy as np
 from dribble.io import Input
 from dribble.percolator import Percolator
 from dribble.lattice import Lattice
-from dribble.aux import uprint
+from dribble.misc import uprint
 
 __author__ = "Alexander Urban"
 
@@ -174,7 +174,7 @@ def main():
 
     parser.add_argument(
         "structure_file",
-        help="Input file in JSON format",
+        help="Optional structure file in VASP's POSCAR format.",
         default=None,
         nargs="?")
 
