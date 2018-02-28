@@ -352,13 +352,23 @@ class Percolator(object):
 
         return (newsites, nspanning)
 
-    def check_spanning(self, verbose=False):
+    def check_spanning(self, verbose=False, save_clusters=False):
         """
         Check, how many (if any) spanning clusters are present.
+
+        Arguments:
+          verbose (bool): if True, print information about clusters to
+            standard out
+          save_clusters (bool): if True, save a structure file named
+            'cluster_{}.vasp' for each detected cluster with more than
+            1 site
+
         """
 
         visited = []
         nspanning = 0
+        avg_size = 0
+        num_clusters = 0
 
         for i in range(self._nsites):
             if (self.cluster[i] > 0) and not (i in visited):
@@ -366,11 +376,28 @@ class Percolator(object):
                 visited += cluster
                 if np.sum(spanning) > 0:
                     nspanning += len(cluster)
-                    if verbose:
-                        uprint(" cluster with " +
+                num_clusters += 1
+                avg_size += len(cluster)
+                if verbose:
+                    if np.sum(spanning) > 0:
+                        uprint("   Spanning cluster with " +
                                "{} sites, ".format(len(cluster)) +
                                "paths in (x,y,z): " +
                                "{} {} {}".format(*spanning))
+                    else:
+                        uprint("   Isolated cluster with " +
+                               "{} sites, ".format(len(cluster)))
+                if save_clusters and len(cluster) > 1:
+                    self.save_cluster(cluster,
+                                      file_name="cluster_{}.vasp".format(i),
+                                      sort_species=False)
+
+        if num_clusters > 0:
+            avg_size /= num_clusters
+        if verbose:
+            uprint("")
+            uprint(" Average cluster size: " + "{}".format(avg_size))
+            uprint("")
 
         return nspanning
 
@@ -927,7 +954,7 @@ class Percolator(object):
                     if file_name:
                         self.save_cluster(
                             self.largest_cluster,
-                            file_name=(file_name+("-1.%05d" % (i,))))
+                            file_name=(file_name+("-1d_%05d" % (i,))))
                     comp = self.lattice.composition
                     for s in comp:
                         if s in percolating_composition:
@@ -942,14 +969,14 @@ class Percolator(object):
                     if file_name:
                         self.save_cluster(
                             self.largest_cluster,
-                            file_name=(file_name + ("-2.%05d" % (i,))))
+                            file_name=(file_name + ("-2d_%05d" % (i,))))
                 if np.all(wrapping > 0):
                     pc_site_all += w1*float(n+1)
                     pc_bond_all += w2*float(self._nbonds)
                     if file_name:
                         self.save_cluster(
                             self.largest_cluster,
-                            file_name=(file_name + ("-3.%05d" % (i,))))
+                            file_name=(file_name + ("-3d_%05d" % (i,))))
                     break
                 if n == num_active_sites-1:
                     stderr.write(
@@ -958,7 +985,8 @@ class Percolator(object):
                         "Maybe you defined a percolation rule that "
                         "never percolates.\n       "
                         "Have a look at `ERROR.vasp'.\n")
-                    self.save_cluster(self.largest_cluster, file_name="ERROR.vasp")
+                    self.save_cluster(self.largest_cluster,
+                                      file_name="ERROR.vasp")
                     sys.exit()
 
         pb()
@@ -971,24 +999,40 @@ class Percolator(object):
         return (pc_site_any, pc_site_two, pc_site_all,
                 pc_bond_any, pc_bond_two, pc_bond_all)
 
-    def save_cluster(self, cluster, file_name="CLUSTER.vasp"):
+    def save_cluster(self, cluster, file_name="CLUSTER.vasp",
+                     sort_species=True):
         """
         Save a particular cluster to an output file.
         Relies on `pymatgen' for the file I/O.
+
+        Arguments:
+          cluster (int or list): either the ID of a cluster or a list of
+            all sites within a cluster
+          file_name (str): name of the POSCAR file to be created
+          sort_species (bool): if True, the coordinates will be sorted
+            by species in the POSCAR file
+
         """
 
         from pymatgen.core.structure import Structure
         from pymatgen.io.vasp.inputs import Poscar
 
         species = ["V" for i in range(self._nsites)]
-        i = self._first[cluster]
-        species[i] = "O"
-        while (self._next[i] >= 0):
-            i = self._next[i]
+        if isinstance(cluster, (int, np.int64)):
+            i = self._first[cluster]
             species[i] = "O"
+            while (self._next[i] >= 0):
+                i = self._next[i]
+                species[i] = "O"
+        else:
+            for i in cluster:
+                species[i] = "O"
 
         species = np.array(species)
-        idx = np.argsort(species)
+        if sort_species:
+            idx = np.argsort(species)
+        else:
+            idx = np.array([i for i in range(len(species))])
 
         struc = Structure(self._avec, species[idx], self._coo[idx])
         poscar = Poscar(struc)
