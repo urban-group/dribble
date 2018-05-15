@@ -1,3 +1,16 @@
+# ----------------------------------------------------------------------
+# This file is part of the 'Dribble' package for percolation simulations.
+# Copyright (c) 2013-2018 Alexander Urban (aurban@atomistic.net)
+# ----------------------------------------------------------------------
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# Mozilla Public License, v. 2.0, for more details.
+
 """
 Site rules define whether a site can potentially be part of a
 percolating network based on the occupancy of the surrounding sites.
@@ -16,7 +29,7 @@ import abc
 import numpy as np
 
 __author__ = "Alexander Urban"
-__email__ = "aurban@lbl.gov"
+__email__ = "aurban@atomistic.net"
 __date__ = "2017-07-24"
 __version__ = "0.1"
 
