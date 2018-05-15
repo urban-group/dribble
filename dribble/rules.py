@@ -127,33 +127,46 @@ class BondRule(metaclass=abc.ABCMeta):
 
 class AllowedBondBR(BondRule):
     """
-    True if the sublattices that the two sites belong to are allowed to
+    True if the sublattices and species of the two sites are allowed to
     form bonds.
 
     """
 
-    def __init__(self, allowed_bonds, invert=False):
+    def __init__(self, sublattices=None, species=None, invert=False):
         """
         Arguments:
-          allowed_bonds (list): Allowed combination of sublattices as
+          sublattices (list): Allowed combination of sublattices as
               list of tuples or sets.
               Example:  Given three sublattices A, B, C, allowed_bonds
                         could be:  [{"A", "B"}, {"A", "C"}]
                         meaning that no direct percolation between "B"
                         and "C" is possible.
+          species (list): Allowed combinations of species in the same
+              format at the sublattices above.
           invert (bool): if True, the rule is inverted
 
         """
-        super(CommonNeighborsBR, self).__init__(invert=invert)
-        self.allowed_bonds = [set(b) for b in allowed_bonds]
+        super(AllowedBondBR, self).__init__(invert=invert)
+        if sublattices is None:
+            self.sublattices = None
+        else:
+            self.sublattices = [set(b) for b in sublattices]
+        if species is not None:
+            self.species = None
+        else:
+            self.species = [set(b) for b in species]
 
     def _check_percolating(self, percolator, site1, site2):
-        sl1 = percolator.lattice.site_labels[site1]
-        sl2 = percolator.lattice.site_labels[site2]
-        if {sl1, sl2} in self.allowed_bonds:
-            return True
-        else:
-            return False
+        percolating = True
+        if self.sublattices is not None:
+            sl1 = percolator.lattice.site_labels[site1]
+            sl2 = percolator.lattice.site_labels[site2]
+            percolating &= ({sl1, sl2} in self.sublattices)
+        if self.species is not None:
+            sl1 = percolator.lattice.species[site1]
+            sl2 = percolator.lattice.species[site2]
+            percolating &= ({sl1, sl2} in self.species)
+        return percolating
 
 
 class NearestNeighborBR(BondRule):
