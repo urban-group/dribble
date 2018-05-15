@@ -1,23 +1,27 @@
-""" Copyright (c) 2013-2017 Alexander Urban
+# Copyright (c) 2013-2018 Alexander Urban
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
- Permission is hereby granted, free of charge, to any person obtaining a
- copy of this software and associated documentation files (the
- "Software"), to deal in the Software without restriction, including
- without limitation the rights to use, copy, modify, merge, publish,
- distribute, sublicense, and/or sell copies of the Software, and to
- permit persons to whom the Software is furnished to do so, subject to
- the following conditions:
+"""
+Implementations of lattice percolation techniques.
 
- The above copyright notice and this permission notice shall be included
- in all copies or substantial portions of the Software.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
- LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
- OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
- WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from __future__ import print_function, division, unicode_literals
@@ -41,25 +45,74 @@ EPS = 100.0*np.finfo(np.float).eps
 
 class Percolator(object):
     """
-    The Percolator class implements a fast MC algorithm for percolation
-    analysis on regular lattices [1].  Several different methods allow
-    the computation of various quantities related to percolation, such
-    as the percolation susceptibility, the ratio of the largest cluster
-    of sites to all occupied sites, the probability for wrapping
-    (periodic) clusters vs. the site concentration, and the percolation
-    threshold.
+    The Percolator class implements several techniques to evaluate
+    percolation properties of a given structure or lattice.  This
+    includes a fast MC algorithm for percolation analysis on regular
+    lattices [1].  Several different methods allow the computation of
+    various quantities related to percolation, such as the percolation
+    susceptibility, the ratio of the largest cluster of sites to all
+    occupied sites, the probability for wrapping (periodic) clusters
+    vs. the site concentration, and the percolation threshold.
 
-    See the doc string of the individual methods for details:
+    Note on the terminology:
 
-       calc_p_infinity
-       calc_p_wrapping
-       percolating_bonds
-       inaccessible_sites
-       percolation_point
+    Site percolation traditionally considers only two states for each
+    site: `occupied` or `vacant`.  The terminology used in this class
+    therefore refers to sites occupied by "percolating" species as
+    "occupied", and all other sites are considered "vacant" irrespective
+    of their species.  For example, in a lithium conductor all Li sites
+    would be dubbed "occupied" whereas sites with any other species
+    would be considered "vacant".  Often, vacancies are actually a
+    percolating species, in which case vacancy sites would be considered
+    "occupied" here!
 
-    Apart from regular percolation analyses, special percolation rules
-    can be specified using `set_special_percolation_rule()'.  This
-    allows to modify the criteria of percolating bonds.
+    Methods for the analysis of static structures:
+
+       check_spanning - Analyze percolating domains in a structure
+       get_cluster_of_site - Determine connected sites
+       extend_cluster - Grow percolating domains
+
+    Methods for the (MC) calculation of percolation properties on
+    regular lattices:
+
+       calc_p_infinity - Calc. prob. of infinite cluster and susceptibility
+       calc_p_wrapping - Calc. prob. of wrapping cluster
+       inaccessible_sites - Calculate non-percolating fraction
+       percolation_point - Calculate the percolation threshold
+
+       The MC routines can draw progress bars to standard out to
+       indicate the progress of the simulation.
+
+    Auxiliary methods:
+
+       save_clusters - Export a structure file for a select cluster
+       save_neighbors - Export the neighbors of a select site
+
+    Attributes:
+
+       num_sites - Total number of sites
+       occupied[i] - i-th occupied site (see terminology above)
+       vacant[i] - i-th vacant site (see terminology above)
+       num_occupied - Total number of occupied sites (see terminology above)
+       num_vacant - Total number of vacant sites (see terminology above)
+       num_percolating - Number of sites within percolating domains
+
+       bond[i][j] - True, if site i is bound to its j-th neighbor site
+       num_bonds - Number of bonds between sites
+       num_bonds_max - Max. number of bonds possible for given lattice
+
+       cluster[i] - ID of the domain (cluster) associated with site i;
+           (cluster[i] < 0) if site i is vacant
+       cluster_size[i] - Number of sites within cluster i
+       largest_cluster - ID of the domain (cluster) with most sites
+       num_clusters - Total number of domains (clusters) of occupied sites
+       num_clus_percol - Number of percolating (periodically wrapping) domains
+       wrapping[i][j] - Number of periodically wrapping paths within
+           cluster i in lattice direction j (j = 0, 1, 2)
+       num_paths - Total number of periodically wrapping paths found
+
+
+       progress_bar_char - UTF-8 character used to draw progress bars
 
     [1] Newman and Ziff, Phys. Rev. Lett. 85, 4104-4107 (2000).
 
@@ -78,21 +131,8 @@ class Percolator(object):
 
         """
 
-        """                    static data
-
-        _bonds[i][j]        True, if there is a bond between the j-th site
-                            and its j-th neighbor
-        _nsurface           number of sites at cell boundary
-                            (computed, if needed)
-        _T_vectors[i][j]    the translation vector belonging to
-                            _neighbors[i][j]
-        _nbonds_tot         maximum number of possible bonds between the sites
-        cluster[i]          ID of cluster that site i belongs to; < 0, if
-                            site i is vacant
-        """
-
         self.lattice = lattice
-        self._percolating_species = percolating_species
+        self.percolating_species = percolating_species
         self._static_species = static_species
         self._initial_concentrations = initial_concentrations
         self.site_rules = {} if site_rules is None else site_rules
@@ -104,24 +144,25 @@ class Percolator(object):
         self._nsites = self.lattice._nsites
         self.neighbors = self.lattice._nn
         self._T_vectors = self.lattice._T_nn
-        self._nsurface = self.lattice._nsurface
         self.cluster = self.lattice._occup
-        self._occupied = self.lattice._occupied
-        self._vacant = self.lattice._vacant
+        self.occupied = self.lattice._occupied
+        self.vacant = self.lattice._vacant
 
-        self._bonds = []
+        self.bond = []
         # max. number of bonds is half the number of nearest neighbors
-        self._nbonds_tot = 0
+        self.num_bonds_max = 0
         for i in range(self._nsites):
             nbs = len(self.neighbors[i])
             if nbs > len(set(self.neighbors[i])):
                 raise ValueError("Cell size too small. Try supercell.")
-            self._nbonds_tot += nbs
-            self._bonds.append(np.array(nbs*[False]))
-        self._nbonds_tot /= 2
+            self.num_bonds_max += nbs
+            self.bond.append(np.array(nbs*[False]))
+        self.num_bonds_max /= 2
 
-        initially_occupied_sites = lattice._occupied[:]
-        self.reset(occupied=initially_occupied_sites)
+        self.initially_occupied_sites = lattice._occupied[:]
+        self.initial_species = [self.lattice.species[i]
+                                for i in self.initially_occupied_sites]
+        self.reset()
 
         sys.setrecursionlimit(50000)
 
@@ -184,66 +225,62 @@ class Percolator(object):
                          bond_rules=bond_rules)
         return percolator
 
-    def reset(self, occupied=[]):
+    def reset(self, occupied=None, species=None):
         """
         Reset the instance to the state of initialization.
         Static occupied sites are ensured to be always occupied.
 
         """
 
-        """              internal dynamic data
+        if occupied is None:
+            occupied = self.initially_occupied_sites[:]
 
-        cluster[i]      ID of cluster that site i belongs to; < 0, if
-                        site i is vacant
-        _nclusters      total number of clusters with more than 0 sites
-                        Note: len(_first) can be larger than this !
-        _nbonds         the number of bonds found so far
-        _npercolating   number of sites that are members of percolating
-                        clusters
-        _nclus_percol   number of percolating clusters
-        _npaths         total number of percolation paths
-        _first[i]       first site (head) of the i-th cluster
-        _size[i]        size of cluster i (i.e., number of sites in i)
-        _is_wrapping[i][j]  number of times that cluster i is wrapping in
-                        direction j
-        _next[i]        the next site in the same cluster as site i;
-                        < 0, if site i is the final site
-        _vec[i][j]      j-th component of the vector that connects
-                        site i with the head site of the cluster
+        if species is None:
+            species = self.initial_species[:]
 
-        _occupied[i]    i-th occupied site
-        _vacant[i]      i-th vacant site
+        if not len(species) == len(occupied):
+            raise ValueError("Error: the number of initial species has "
+                             "to be identical to the number of occupied "
+                             "sites.")
 
-        """
+        self.num_clusters = 0
+        self.num_bonds = 0
+        self.num_percolating = 0
+        self.num_clus_percol = 0
+        self.num_paths = 0
 
-        self._nclusters = 0
-        self._nbonds = 0
-        self._npercolating = 0
-        self._nclus_percol = 0
-        self._npaths = 0
+        self.cluster_size = []
+        self.wrapping = []
+
+        # _first[i]       first site (head) of the i-th cluster
+        # _next[i]        the next site in the same cluster as site i;
+        #                 < 0, if site i is the final site
         self._first = []
-        self._size = []
-        self._is_wrapping = []
         self._next = np.empty(self._nsites, dtype=int)
         self._next[:] = -1
+
+        # _vec[i][j]      j-th component of the vector that connects
+        #                 site i with the head site of the cluster
         self._vec = np.zeros(self._coo.shape)
 
         self.largest_cluster = -1
 
         # initial random species decoration, if specified
-        species = [None for i in occupied]
-        if len(occupied) == 0 and self._initial_concentrations is not None:
+        # species = [None for i in occupied]
+        if len(occupied) == 0 or self._initial_concentrations is not None:
             self.lattice.random_species_decoration(
                 self._initial_concentrations,
-                occupying_species=self._percolating_species,
+                occupying_species=self.percolating_species,
                 static=self._static_species)
             occupied = self.lattice._occupied[:]
             species = [self.lattice.species[i] for i in occupied]
 
         # completely reset lattice
+        # _occupied[i]    i-th occupied site
+        # _vacant[i]      i-th vacant site
         self.cluster[:] = -1
-        self._occupied = []
-        self._vacant = list(range(self._nsites))
+        self.occupied = []
+        self.vacant = list(range(self._nsites))
 
         # Composition of all clusters and total composition of percolating
         # clusters
@@ -251,11 +288,11 @@ class Percolator(object):
         self._percol_comp = {}
 
         for i in range(self._nsites):
-            self._bonds[i][:] = False
+            self.bond[i][:] = False
 
         # repopulate initial occupations, if any:
         for i, s in enumerate(occupied):
-            self.add_percolating_site(site=s, species=species[i])
+            self._add_percolating_site(site=s, species=species[i])
 
     def __str__(self):
         ostr = "\n An instance of the Percolator class\n\n"
@@ -267,24 +304,12 @@ class Percolator(object):
         return self.__str__()
 
     @property
-    def num_clusters(self):
-        return self._nclusters
-
-    @property
-    def num_percolating(self):
-        return len(self._percolating)
-
-    @property
     def num_sites(self):
         return self.lattice.num_sites
 
     @property
     def num_sites_not_static(self):
         return self.lattice.num_sites_not_static
-
-    @property
-    def _not_static(self):
-        return self.lattice.not_static
 
     @property
     def num_vacant(self):
@@ -318,9 +343,38 @@ class Percolator(object):
     def _static_vacant(self):
         return self.lattice.static_vacant
 
+    @property
+    def cluster_set(self):
+        return set(self.cluster) - {-1}
+
+    def get_common_neighbors(self, site1, site2):
+        """
+        Returns a list of common neighbor sites of SITE1 and SITE2.
+        """
+
+        return [nb for nb in self.neighbors[site1]
+                if nb in self.neighbors[site2]]
+
     def get_cluster_of_site(self, site, vec=[0, 0, 0], visited=[]):
         """
-        Recursively determine all other sites connected to SITE.
+        Recursively determine all sites connected to a given site.
+
+        Args:
+          site (int): ID of the input site
+          vec (list or array): Vector pointing from the head of the cluster
+              to the site
+          visited (list): List of sites that have already been visited
+              by recursion
+
+          `vec` and `visited` do not have to be specified manually but
+          are only used in the recursive calls to this method.
+
+        Returns:
+          tuple (sites, nspanning) where
+              sites (list): List of all sites connected with the input site
+              nspanning (array): Counts of spanning paths in the three
+                  lattice directions.
+
         """
 
         if (self.cluster[site] < 0):
@@ -333,7 +387,7 @@ class Percolator(object):
         for i in range(len(self.neighbors[site])):
             nb = self.neighbors[site][i]
             # neighboring site occupied and bound?
-            if ((self.cluster[nb] >= 0) and self.check_bond(site, nb)):
+            if ((self.cluster[nb] >= 0) and self._check_bond(site, nb)):
                 # vector to origin
                 T = self._T_vectors[site][i]
                 v_12 = (self._coo[nb] + T) - self._coo[site]
@@ -351,6 +405,25 @@ class Percolator(object):
                     nspanning += np.where(diff > 0.5, 1, 0)
 
         return (newsites, nspanning)
+
+    def get_sites_of_cluster(self, cluster):
+        """
+        Get all sites within a given cluster.
+
+        Args:
+          cluster (int): ID of the cluster
+
+        Returns:
+          sites (list)
+
+        """
+
+        cluster_sites = []
+        site = self._first[cluster]
+        while site >= 0:
+            cluster_sites.append(site)
+            site = self._next[site]
+        return cluster_sites
 
     def check_spanning(self, verbose=False, save_clusters=False):
         """
@@ -401,245 +474,131 @@ class Percolator(object):
 
         return nspanning
 
-    def get_common_neighbors(self, site1, site2):
+    def extend_cluster(self, cluster_id, site_rules=None,
+                       bond_rules=None, verbose=False):
         """
-        Returns a list of common neighbor sites of SITE1 and SITE2.
-        """
-
-        return [nb for nb in self.neighbors[site1]
-                if nb in self.neighbors[site2]]
-
-    def set_special_percolation_rule(self, num_common=0, same=None,
-                                     require_NN=False, inverse=False,
-                                     dr=0.1):
-        """
-        Define special criteria for a bond between two occupied sites
-        to be percolating.
-
-        Arguments:
-          num_common   number of common neighbors of two sites i and j
-                       that have to be occupied to form a percolating
-                       bond between i and j.
-          same         0, 1, or 2 --> require same x, y, or z coordinate
-                       for the bonding sites; e.g., same=2 will require
-                       both sites to be in the same z-layer
-          require_NN   if True, the 'num_common' criterion additionally
-                       requires the common nearest neighbors themselves
-                       to be nearest neighbors (useful for diffusion on
-                       an fcc lattice)
-          inverse      invert the meaning of num_common so that the
-                       common neighbor sites are vacant instead of occupied
-          dr           required precision for two coordinates to be the 'same'
-        """
-
-        if (require_NN and (num_common < 2)):
-            stderr.write("Error: the percolation rule does not make sense!\n")
-            stderr.write("       {} common neighbors can not be required\n")
-            stderr.write("       to be nearest neighbors themselves!\n")
-            sys.exit()
-
-        def new_special(site1, site2):
-            """
-            Check, if the special percolation rule is fulfilled
-            between sites SITE1 and SITE2.
-
-            This instance defines a special rule.
-
-            """
-
-            common_rule = True
-            same_rule = True
-            NN_rule = True
-
-            if same and (0 <= same <= 2):
-                if (abs(self._coo[site1][same]-self._coo[site2][same]) <= dr):
-                    same_rule = True
-                else:
-                    same_rule = False
-
-            if (num_common > 0) and same_rule:
-                common_rule = False
-                common_nb = self.get_common_neighbors(site1, site2)
-                occupied = []
-                noccup = 0
-                for nb in common_nb:
-                    if inverse:
-                        if (self.cluster[nb] < 0):
-                            occupied.append(nb)
-                            noccup += 1
-                    else:
-                        if (self.cluster[nb] >= 0):
-                            occupied.append(nb)
-                            noccup += 1
-                    if (noccup >= num_common):
-                        common_rule = True
-
-            if (require_NN and common_rule and same_rule):
-                NN_rule = False
-                for i in range(noccup):
-                    site1 = occupied[i]
-                    nb1 = self.neighbors[site1]
-                    num_NN = 1
-                    for j in range(i+1, noccup):
-                        site2 = occupied[j]
-                        if site2 in nb1:
-                            num_NN += 1
-                            if (num_NN >= num_common):
-                                NN_rule = True
-                                break
-
-            percolating = (common_rule and same_rule and NN_rule)
-            return percolating
-
-        self.check_bond = new_special
-
-    def set_complex_percolation_rule(self, site_rules={}, bond_rules={},
-                                     verbose=False):
-        """
-        Define complex criteria based on site and bond stability criteria.
-        The format for these specifications is defined elsewhere.
-
-        Arguments:
-          site_rules   dictionary with site stability criteria
-          bond_rules   dictionary with bond stability criteria
-          verbose      if True, print information to stdout
-
-        """
-
-        def _check_species(sites, rules):
-            """
-            Check if required min/max species counts are satisfied.
-            """
-            satisfied = True
-            species = [self.lattice.species[s] for s in sites]
-            for rule in rules:
-                min_required = rule["min"] if "min" in rule else 0
-                max_allowed = rule["max"] if "max" in rule else np.inf
-                num_sites = len([s for s in species if s in rule["species"]])
-                if (num_sites < min_required) or (num_sites > max_allowed):
-                    satisfied = False
-                    break
-            return satisfied
-
-        def _check_stable(site):
-            """
-            Check whether a site obeys the stability criterion.
-            """
-            stable = True
-            sublattice = self.lattice.site_labels[site]
-            for env in site_rules[sublattice]["stable_neighbor_shells"]:
-                # loop over neighbor shells in site environment
-                for i, nbshell in enumerate(env):
-                    nb_list = self.lattice._nbshells[site][i]
-                    # loop over sublattices in current neighbor shell
-                    for sl in nbshell:
-                        # determine neighbors on select sublattice
-                        neighbors_on_sl = []
-                        for s in nb_list:
-                            if self.lattice.site_labels[s] == sl:
-                                neighbors_on_sl.append(s)
-                        stable &= _check_species(neighbors_on_sl, nbshell[sl])
-            return stable
-
-        def new_special(site1, site2):
-            """
-            Check, d between sites SITE1 and
-            SITE2.
-
-            This instance defines a complex percolation rule.
-
-            """
-
-            percolating = True
-
-            # sublattices
-            sl1 = self.lattice.site_labels[site1]
-            sl2 = self.lattice.site_labels[site2]
-            bond = Bond(sl1, sl2)
-            if bond not in bond_rules:
-                percolating = False
-                return
-
-            percolating &= _check_stable(site1)
-            percolating &= _check_stable(site2)
-
-            return percolating
-
-        self._complex = True
-        self.check_bond = new_special
-
-    def add_percolating_site(self, site=None, species=None):
-        """
-        Change status of SITE to be percolating.
+        Grow a single cluster of occupied sites by allowing additional bonds
+        based on alternative site and/or bond rules.  The cluster is
+        extended by one neighbor shell, so subsequent calls to this
+        method may result in further growth.
 
         Args:
-          site    optional site index; if not specified, the site will be
-                  randomly selected
-          species optional species that will be assigned with the newly
-                  percolating site
+          cluster_id (int): ID of the cluster that is to be grown
+          site_rules (dict): A set of alternative site rules
+          bond_rules (dict): A set of alternative bond rules
+          verbose (bool): Print operations to standard out
 
-        Note: The present implementation only considers bonds between
-              nearest-neighbor sites!
+          Site and bond rules are dictionaries in the following format:
+
+          site_rules = {Site('A'): [<Rule1>, [<Rule2>], ...]}
+          bond_rules = {Bond('A', 'B'): [<Rule1>, [<Rule2>], ...]}
+
+          Site and bond rules are implemented in `.rules.py`.
 
         """
 
-        if (self.num_vacant_not_static <= 0):
-            stderr.write("Warning: all sites are already occupied\n")
-            return
+        # original cluster ID
+        cluster = cluster_id
 
-        if site is None:
-            sel = np.random.random_integers(0, self.num_vacant_not_static-1)
-            site = self._vacant_not_static[sel]
-        elif (site in self._vacant) and (site not in self._static_vacant):
-            sel = self._vacant.index(site)
-        else:
-            stderr.write("Warning: Attempt to occupy invalid site.\n")
-            if site in self._occupied:
-                stderr.write(
-                    "         Site {} is already occupied.\n".format(site))
-            if site in self._static_vacant:
-                stderr.write(
-                    "         Site {} is a static vacancy.\n".format(site))
-            return
+        # all sites of the original cluster:
+        cluster_sites = self.get_sites_of_cluster(cluster)
 
-        del self._vacant[sel]
-        self._occupied.append(site)
-        self.lattice.species[site] = species
+        # iterate over sites in cluster
+        for site in cluster_sites:
+            # check the neighbor sites of the cluster site.  There are three
+            # different possibilities:
+            # (1) The neighbor site is occupied and belongs to the same
+            #     cluster;
+            # (2) The neighbor site is occupied and belongs to a different
+            #     cluster;
+            # (3) The neighbor site is vacant.
+            # Option (3) is irrelevant here, but the other two cases have
+            # to be accounted for.  Option (1) is relevant only if no bond
+            # between the two sites previously existed.
+            for inb, nb in enumerate(self.neighbors[site]):
+                nb_cl = self.cluster[nb]
+                if (nb_cl >= 0) and not self.bond[site][inb]:
+                    merged = self._merge_clusters(cluster, site, nb_cl, nb,
+                                                  self._T_vectors[site][inb],
+                                                  site_rules=site_rules,
+                                                  bond_rules=bond_rules)
+                    if verbose:
+                        if merged and (cluster == nb_cl):
+                            print("New bond between "
+                                  "sites {} and {} in cluster {}.".format(
+                                      site, nb, cluster))
+                            if np.sum(self.wrapping[cluster]) > 0:
+                                print(">>The cluster is wrapping.")
+                        elif merged:
+                            print("Clusters {} and {} merged.".format(
+                                cluster, nb_cl))
+                        else:
+                            print("No bond formed between "
+                                  "sites {} and {}.".format(site, nb))
 
-        # for the moment, add a new cluster
-        self._first.append(site)
-        self._size.append(1)
-        self._is_wrapping.append(np.array([0, 0, 0]))
-        cl = len(self._first) - 1
-        self.cluster[site] = cl
-        self._cluster_comp[cl] = {species: 1}
-        self._nclusters += 1
-        self._vec[site, :] = [0.0, 0.0, 0.0]
-        if (self.largest_cluster < 0):
-            self.largest_cluster = self.cluster[site]
+    def extend_sites(self, site_rules=None, bond_rules=None,
+                     verbose=False):
+        """
+        Allow each occupied site to form (at most) one additional bond based
+        on alternative site and/or bond rules.  Subsequent calls to this
+        method may result in further bonding.
 
-        # check, if this site
-        # - defines a new cluster,
-        # - will be added to an existing cluster, or
-        # - connects multiple existing clusters.
-        for i in range(len(self.neighbors[site])):
-            nb = self.neighbors[site][i]
-            cl = self.cluster[nb]
-            if (cl >= 0):
-                # only consider bonds between nearest neighbors
-                if nb in self.lattice._nbshells[site][0]:
-                    self._merge_clusters(cl, nb, self.cluster[site],
-                                         site, -self._T_vectors[site][i])
+        Args:
+          site_rules (dict): A set of alternative site rules
+          bond_rules (dict): A set of alternative bond rules
+          verbose (bool): Print operations to standard out
 
-                # update also next nearest neighbors
-                # loop over the neighbors of the neighbor
-                for j in range(len(self.neighbors[nb])):
-                    nb2 = self.neighbors[nb][j]
-                    cl2 = self.cluster[nb2]
-                    # also here: consider only neares-neighbor bonds
-                    if (cl2 >= 0) and (nb2 in self.lattice._nbshells[nb][0]):
-                        self._merge_clusters(cl2, nb2, self.cluster[nb],
-                                             nb, -self._T_vectors[nb][j])
+          Site and bond rules are dictionaries in the following format:
+
+          site_rules = {Site('A'): [<Rule1>, [<Rule2>], ...]}
+          bond_rules = {Bond('A', 'B'): [<Rule1>, [<Rule2>], ...]}
+
+          Site and bond rules are implemented in `.rules.py`.
+
+        """
+
+        # keep track of visited sites
+        visited = []
+
+        for site in self.occupied:
+            if site in visited:
+                continue
+            cluster = self.cluster[site]
+            # check the neighbor sites of the cluster site.  There are three
+            # different possibilities:
+            # (1) The neighbor site is occupied and belongs to the same
+            #     cluster;
+            # (2) The neighbor site is occupied and belongs to a different
+            #     cluster;
+            # (3) The neighbor site is vacant.
+            # Option (3) is irrelevant here, but the other two cases have
+            # to be accounted for.  Option (1) is relevant only if no bond
+            # between the two sites previously existed.
+            for inb, nb in enumerate(self.neighbors[site]):
+                if (nb in visited) or (site in visited):
+                    continue
+                nb_cl = self.cluster[nb]
+                if (nb_cl >= 0) and not self.bond[site][inb]:
+                    merged = self._merge_clusters(cluster, site, nb_cl, nb,
+                                                  self._T_vectors[site][inb],
+                                                  site_rules=site_rules,
+                                                  bond_rules=bond_rules)
+                    if merged:
+                        visited.append(site)
+                        visited.append(nb)
+                    if verbose:
+                        if merged and (cluster == nb_cl):
+                            print("New bond between "
+                                  "sites {} and {} in cluster {}.".format(
+                                      site, nb, cluster))
+                            if np.sum(self.wrapping[cluster]) > 0:
+                                print(">>The cluster is wrapping.")
+                        elif merged:
+                            print("Clusters {} and {} merged.".format(
+                                cluster, nb_cl))
+                        else:
+                            print("No bond formed between "
+                                  "sites {} and {}.".format(site, nb))
 
     def calc_p_infinity(self, plist, sequence, samples=500,
                         save_discrete=False):
@@ -702,12 +661,13 @@ class Percolator(object):
                     Xn.append(0)
                 num_active_sites = len(flip_list)
             for n, (site, species) in enumerate(flip_list):
-                self.add_percolating_site(site=site, species=species)
-                Pn[n] += w*(float(self._size[self.largest_cluster])/float(n+1))
-                for cl in range(len(self._size)):
+                self._add_percolating_site(site=site, species=species)
+                Pn[n] += w*(float(self.cluster_size[self.largest_cluster]
+                                  )/float(n+1))
+                for cl in range(len(self.cluster_size)):
                     if cl == self.largest_cluster:
                         continue
-                    Xn[n] += w2*self._size[cl]**2/float(n+1)
+                    Xn[n] += w2*self.cluster_size[cl]**2/float(n+1)
         Pn = np.array(Pn)
         Xn = np.array(Xn)
 
@@ -782,8 +742,8 @@ class Percolator(object):
                     Pnc.append(0)
                 num_active_sites = len(flip_list)
             for n, (site, species) in enumerate(flip_list):
-                self.add_percolating_site(site=site, species=species)
-                wrapping = np.sum(self._is_wrapping[self.largest_cluster])
+                self._add_percolating_site(site=site, species=species)
+                wrapping = np.sum(self.wrapping[self.largest_cluster])
                 if (wrapping > 0):
                     Pnc[n:] += w
                     Pn[n] += w2
@@ -865,15 +825,15 @@ class Percolator(object):
                     Qn.append(0)
                 num_active_sites = len(flip_list)
             for n, (site, species) in enumerate(flip_list):
-                self.add_percolating_site(site=site, species=species)
+                self._add_percolating_site(site=site, species=species)
                 N_ref = len(self.lattice.sites_of_species(species))
                 try:
                     N_ref_percol = self._percol_comp[species]
                 except KeyError:
                     N_ref_percol = 0
                 Pn[n] += w*float(N_ref - N_ref_percol)/float(N_ref)
-                # Pn[n] += w*float(n+1-self._npercolating)/float(n+1)
-                Qn[n] += w*float(self._nclus_percol)/float(self._nclusters)
+                # Pn[n] += w*float(n+1-self.num_percolating)/float(n+1)
+                Qn[n] += w*float(self.num_clus_percol)/float(self.num_clusters)
         Pn = np.array(Pn)
         Qn = np.array(Qn)
 
@@ -932,7 +892,7 @@ class Percolator(object):
 
         percolating_composition = {s: 0.0 for s in comp}
         w = 1.0/float(samples)
-        w2 = w/float(self._nbonds_tot)
+        w2 = w/float(self.num_bonds_max)
         for i in range(samples):
             pb()
             self.reset()
@@ -945,11 +905,11 @@ class Percolator(object):
             w1 = w/float(num_active_sites)
             done_any = done_two = False
             for n, (site, species) in enumerate(flip_list):
-                self.add_percolating_site(site=site, species=species)
-                wrapping = self._is_wrapping[self.largest_cluster]
+                self._add_percolating_site(site=site, species=species)
+                wrapping = self.wrapping[self.largest_cluster]
                 if (np.sum(wrapping) > 0) and not done_any:
                     pc_site_any += w1*float(n+1)
-                    pc_bond_any += w2*float(self._nbonds)
+                    pc_bond_any += w2*float(self.num_bonds)
                     done_any = True
                     if file_name:
                         self.save_cluster(
@@ -964,7 +924,7 @@ class Percolator(object):
                 if (np.sum(
                         np.where(wrapping > 0, 1, 0)) >= 2) and not done_two:
                     pc_site_two += w1*float(n+1)
-                    pc_bond_two += w2*float(self._nbonds)
+                    pc_bond_two += w2*float(self.num_bonds)
                     done_two = True
                     if file_name:
                         self.save_cluster(
@@ -972,7 +932,7 @@ class Percolator(object):
                             file_name=(file_name + ("-2d_%05d" % (i,))))
                 if np.all(wrapping > 0):
                     pc_site_all += w1*float(n+1)
-                    pc_bond_all += w2*float(self._nbonds)
+                    pc_bond_all += w2*float(self.num_bonds)
                     if file_name:
                         self.save_cluster(
                             self.largest_cluster,
@@ -1041,6 +1001,7 @@ class Percolator(object):
     def save_neighbors(self, site, file_name="NEIGHBORS.vasp"):
         """
         Save neighbors of site SITE to an output file.
+
         """
 
         from pymatgen.core.structure import Structure
@@ -1058,76 +1019,134 @@ class Percolator(object):
         poscar = Poscar(struc)
         poscar.write_file(file_name)
 
-    def compute_surface_area(self, avec):
+    def _add_percolating_site(self, site=None, species=None):
         """
-        Compute the surface area of the simulation cell defined by the
-        lattice vector matrix AVEC.
-        """
+        Change status of SITE to be percolating.
 
-        A = 0.0
-        A += 2.0*np.linalg.norm(np.cross(avec[0], avec[1]))
-        A += 2.0*np.linalg.norm(np.cross(avec[0], avec[2]))
-        A += 2.0*np.linalg.norm(np.cross(avec[1], avec[2]))
-        return A
+        Args:
+          site    optional site index; if not specified, the site will be
+                  randomly selected
+          species optional species that will be assigned with the newly
+                  percolating site
 
-    def _count_surface_sites(self, dr=0.1):
-        """
-        Count the number of sites at the cell boundaries.
-        This number is needed to determine the percolation flux.
+        Returns:
+          merge_log (list): List of all merged clusters (if any) resulting
+              from the additional site in the following format:
+              [(c1, c2), (c3, c4), ...]
+              Where the first cluster id in each tuple (c1, c3) gives the
+              cluster that does no longer exist, and the second id (c2, c4)
+              is the cluster that absorbed the other one.
 
-        Arguments:
-          dr   allowed fluctuation in the coordinates is +/- dr
-        """
-
-        nsurf = 0
-
-        dr2 = 2.0*dr
-
-        # first lattice direction
-        idx = np.argsort(self._coo[:, 0])
-        minval = self._coo[idx[0], 0]
-        for i in idx:
-            if (self._coo[i, 0] < minval + dr2):
-                nsurf += 2
-            else:
-                break
-
-        # second lattice direction
-        idx = np.argsort(self._coo[:, 1])
-        minval = self._coo[idx[0], 1]
-        for i in idx:
-            if (self._coo[i, 1] < minval + dr2):
-                nsurf += 2
-            else:
-                break
-
-        # third lattice direction
-        idx = np.argsort(self._coo[:, 2])
-        minval = self._coo[idx[0], 2]
-        for i in idx:
-            if (self._coo[i, 2] < minval + dr2):
-                nsurf += 2
-            else:
-                break
-
-        self._nsurface = nsurf
-
-    def _merge_clusters(self, cluster1, site1, cluster2, site2, T2):
-        """
-        Add sites of cluster2 to cluster1.
+        Note: The present implementation only considers bonds between
+              nearest-neighbor sites!
 
         """
 
-        if not self.check_bond(site1, site2):
+        if (self.num_vacant_not_static <= 0):
+            stderr.write("Warning: all sites are already occupied\n")
             return
+
+        if site is None:
+            sel = np.random.random_integers(0, self.num_vacant_not_static-1)
+            site = self.vacant_not_static[sel]
+        elif (site in self.vacant) and (site not in self._static_vacant):
+            sel = self.vacant.index(site)
+        else:
+            stderr.write("Warning: Attempt to occupy invalid site.\n")
+            if site in self.occupied:
+                stderr.write(
+                    "         Site {} is already occupied.\n".format(site))
+            if site in self._static_vacant:
+                stderr.write(
+                    "         Site {} is a static vacancy.\n".format(site))
+            return
+
+        del self.vacant[sel]
+        self.occupied.append(site)
+        self.lattice.species[site] = species
+
+        # for the moment, add a new cluster
+        self._first.append(site)
+        self.cluster_size.append(1)
+        self.wrapping.append(np.array([0, 0, 0]))
+        cl = len(self._first) - 1
+        self.cluster[site] = cl
+        self._cluster_comp[cl] = {species: 1}
+        self.num_clusters += 1
+        self._vec[site, :] = [0.0, 0.0, 0.0]
+        if (self.largest_cluster < 0):
+            self.largest_cluster = self.cluster[site]
+
+        # check, if this site
+        # - defines a new cluster,
+        # - will be added to an existing cluster, or
+        # - connects multiple existing clusters.
+        merge_log = []
+        for i in range(len(self.neighbors[site])):
+            nb = self.neighbors[site][i]
+            cl = self.cluster[nb]
+            if (cl >= 0):
+                # only consider bonds between nearest neighbors
+                if nb in self.lattice._nbshells[site][0]:
+                    self._merge_clusters(cl, nb, self.cluster[site],
+                                         site, -self._T_vectors[site][i])
+                    if cl != self.cluster[site]:
+                        merge_log.append((self.cluster[site], cl))
+
+                # update also next nearest neighbors
+                # loop over the neighbors of the neighbor
+                for j in range(len(self.neighbors[nb])):
+                    nb2 = self.neighbors[nb][j]
+                    cl2 = self.cluster[nb2]
+                    # also here: consider only neares-neighbor bonds
+                    if (cl2 >= 0) and (nb2 in self.lattice._nbshells[nb][0]):
+                        self._merge_clusters(cl2, nb2, self.cluster[nb],
+                                             nb, -self._T_vectors[nb][j])
+                        if cl2 != self.cluster[site]:
+                            merge_log.append((self.cluster[site], cl2))
+
+        return merge_log
+
+    def _merge_clusters(self, cluster1, site1, cluster2, site2, T2,
+                        site_rules=None, bond_rules=None):
+        """
+        Try to add sites of cluster2 to cluster1 by forming a bond between
+        two sites.
+
+        Args:
+          cluster1 (int): ID of the first cluster
+          site1 (int): Contact site of the first cluster
+          cluster2 (int): ID of the second cluster
+          site2 (int): Contact site of the second cluster
+          T2 (array): vector connecting the two sites
+          site_rules (dict): site rules to be used; if not given, use
+              the default rules
+          bond_rules (dict): bond rules to be used; if not given, use
+              the default rules
+
+          Site and bond rules are dictionaries in the following format:
+
+          site_rules = {Site('A'): [<Rule1>, [<Rule2>], ...]}
+          bond_rules = {Bond('A', 'B'): [<Rule1>, [<Rule2>], ...]}
+
+          Site and bond rules are implemented in `.rules.py`.
+
+        Returns:
+          merged (bool): True if the bond has been created, otherwise False
+
+        """
+
+        if not self._check_bond(site1, site2, site_rules=site_rules,
+                                bond_rules=bond_rules):
+            return False
 
         # remember bonds
         nb1 = self.neighbors[site1].index(site2)
-        if not self._bonds[site1][nb1]:
+        if not self.bond[site1][nb1]:
             nb2 = self.neighbors[site2].index(site1)
-            self._bonds[site1][nb1] = True
-            self._bonds[site2][nb2] = True
-            self._nbonds += 1
+            self.bond[site1][nb1] = True
+            self.bond[site2][nb2] = True
+            self.num_bonds += 1
 
         # vector from head node of cluster2 to head of cluster1
         v_12 = (self._coo[site2] + T2) - self._coo[site1]
@@ -1137,45 +1156,45 @@ class Percolator(object):
             # if `vec' is different from the stored vector, we have
             # a wrapping cluster, i.e. we found the periodic image of
             # a site that is already part of the cluster
-            wrapping1 = np.sum(self._is_wrapping[cluster1])
+            wrapping1 = np.sum(self.wrapping[cluster1])
             if abs(vec[0]) > 0.5:
-                self._is_wrapping[cluster1][0] += 1
-                self._npaths += 1
+                self.wrapping[cluster1][0] += 1
+                self.num_paths += 1
             if abs(vec[1]) > 0.5:
-                self._is_wrapping[cluster1][1] += 1
-                self._npaths += 1
+                self.wrapping[cluster1][1] += 1
+                self.num_paths += 1
             if abs(vec[2]) > 0.5:
-                self._is_wrapping[cluster1][2] += 1
-                self._npaths += 1
-            if (wrapping1 == 0) and np.sum(self._is_wrapping[cluster1]) > 0:
-                self._npercolating += self._size[cluster1]
+                self.wrapping[cluster1][2] += 1
+                self.num_paths += 1
+            if (wrapping1 == 0) and np.sum(self.wrapping[cluster1]) > 0:
+                self.num_percolating += self.cluster_size[cluster1]
                 for s, c in self._cluster_comp[cluster1].items():
                     if s in self._percol_comp:
                         self._percol_comp[s] += c
                     else:
                         self._percol_comp[s] = c
-                self._nclus_percol += 1
-            return
+                self.num_clus_percol += 1
+            return True
         else:
             # keep track of the number of sites in wrapping clusters
-            wrapping1 = np.sum(self._is_wrapping[cluster1])
-            wrapping2 = np.sum(self._is_wrapping[cluster2])
+            wrapping1 = np.sum(self.wrapping[cluster1])
+            wrapping2 = np.sum(self.wrapping[cluster2])
             if (wrapping1 > 0) and (wrapping2 == 0):
-                self._npercolating += self._size[cluster2]
+                self.num_percolating += self.cluster_size[cluster2]
                 for s, c in self._cluster_comp[cluster2].items():
                     if s in self._percol_comp:
                         self._percol_comp[s] += c
                     else:
                         self._percol_comp[s] = c
             elif (wrapping1 == 0) and (wrapping2 > 0):
-                self._npercolating += self._size[cluster1]
+                self.num_percolating += self.cluster_size[cluster1]
                 for s, c in self._cluster_comp[cluster1].items():
                     if s in self._percol_comp:
                         self._percol_comp[s] += c
                     else:
                         self._percol_comp[s] = c
             elif (wrapping1 > 0) and (wrapping2 > 0):
-                self._nclus_percol -= 1
+                self.num_clus_percol -= 1
 
         # add vec to all elements of the second cluster
         # and change their cluster ID
@@ -1194,14 +1213,14 @@ class Percolator(object):
         self._next[j] = self._first[cluster2]
 
         # keep track of the cluster sizes and the largest cluster
-        self._size[cluster1] += self._size[cluster2]
-        if (self._size[cluster1] > self._size[self.largest_cluster]):
+        self.cluster_size[cluster1] += self.cluster_size[cluster2]
+        if (self.cluster_size[cluster1] > self.cluster_size[self.largest_cluster]):
             self.largest_cluster = cluster1
 
         # keep track of the wrapping property
-        l1 = self._is_wrapping[cluster1]
-        l2 = self._is_wrapping[cluster2]
-        self._is_wrapping[cluster1] = l1 + l2
+        l1 = self.wrapping[cluster1]
+        l2 = self.wrapping[cluster2]
+        self.wrapping[cluster1] = l1 + l2
 
         # combined cluster composition
         for s, c2 in self._cluster_comp[cluster2].items():
@@ -1212,22 +1231,35 @@ class Percolator(object):
 
         # Only delete the cluster, if it is the last in the list.
         # Otherwise we would have to update the cluster IDs on all sites.
-        self._nclusters -= 1
+        self.num_clusters -= 1
         if (len(self._first) == cluster2+1):
             del self._first[cluster2]
-            del self._size[cluster2]
-            del self._is_wrapping[cluster2]
+            del self.cluster_size[cluster2]
+            del self.wrapping[cluster2]
         else:
             self._first[cluster2] = -1
-            self._size[cluster2] = 0
-            self._is_wrapping[cluster2] = [0, 0, 0]
+            self.cluster_size[cluster2] = 0
+            self.wrapping[cluster2] = [0, 0, 0]
 
-    def check_bond(self, site1, site2):
+        return True
+
+    def _check_bond(self, site1, site2, site_rules=None, bond_rules=None):
         """
         Check, if the bond between two sites is percolating.
 
         Arguments:
           site1, site2 (int): Indices of the two sites
+          site_rules (dict): site rules to be used; if not given, use
+              the default rules
+          bond_rules (dict): bond rules to be used; if not given, use
+              the default rules
+
+          Site and bond rules are dictionaries in the following format:
+
+          site_rules = {Site('A'): [<Rule1>, [<Rule2>], ...]}
+          bond_rules = {Bond('A', 'B'): [<Rule1>, [<Rule2>], ...]}
+
+          Site and bond rules are implemented in `.rules.py`.
 
         Returns:
           True, if the bond is percolating
@@ -1235,23 +1267,28 @@ class Percolator(object):
 
         """
 
-        # check stability of both sites
+        sr = self.site_rules if site_rules is None else site_rules
+        br = self.bond_rules if bond_rules is None else bond_rules
+
+        # sublattices
         sl1 = self.lattice.site_labels[site1]
         sl2 = self.lattice.site_labels[site2]
-        if sl1 in self.site_rules:
-            for sr in self.site_rules[sl1]:
-                if not sr(self, site1):
+
+        # check individual stability of both sites
+        if sl1 in sr:
+            for rule in sr[sl1]:
+                if not rule(self, site1):
                     return False
-        if sl2 in self.site_rules:
-            for sr in self.site_rules[sl2]:
-                if not sr(self, site2):
+        if sl2 in sr:
+            for rule in sr[sl2]:
+                if not rule(self, site2):
                     return False
 
-        # check whether the bond is percolating
+        # check whether the bond between both sites is percolating
         bond = Bond(sl1, sl2)
-        if bond in self.bond_rules:
-            for br in self.bond_rules[bond]:
-                if not br(self, site1, site2):
+        if bond in br:
+            for rule in br[bond]:
+                if not rule(self, site1, site2):
                     return False
         else:
             return False
