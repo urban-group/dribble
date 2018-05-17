@@ -339,6 +339,23 @@ class Percolator(object):
     def cluster_set(self):
         return set(self.cluster) - {-1}
 
+    @property
+    def percolating_clusters(self):
+        """ Return set with IDs of all percolating clusters. """
+        clusters = set()
+        for cl in self.cluster_set:
+            if np.sum(self.wrapping[cl]) > 0:
+                clusters.add(cl)
+        return clusters
+
+    @property
+    def percolating_sites(self):
+        """ Return list of all sites that are part of percolating clusters """
+        sites = []
+        for cl in self.percolating_clusters:
+            sites.extend(self.get_sites_of_cluster(cl))
+        return sites
+
     def get_common_neighbors(self, site1, site2):
         """
         Returns a list of common neighbor sites of SITE1 and SITE2.
