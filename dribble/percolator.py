@@ -968,6 +968,37 @@ class Percolator(object):
         return (pc_site_any, pc_site_two, pc_site_all,
                 pc_bond_any, pc_bond_two, pc_bond_all)
 
+    def save_structure(self, file_name="percolating_sites.vasp",
+                       sort_species=True, label="P"):
+        """
+        Save the current lattice decoration to an output file, labeling all
+        sites that are connected to percolating clusters (if
+        any). Relies on `pymatgen' for the file I/O.
+
+        Arguments:
+          file_name (str): name of the POSCAR file to be created
+          sort_species (bool): if True, the coordinates will be sorted
+            by species in the POSCAR file
+          label (str): Species to be used to indicate percolating sites.
+
+        """
+
+        from pymatgen.core.structure import Structure
+        from pymatgen.io.vasp.inputs import Poscar
+
+        species = np.array(self.lattice.species[:])
+        for site in self.percolating_sites:
+            species[site] = label
+
+        if sort_species:
+            idx = np.argsort(species)
+        else:
+            idx = np.array([i for i in range(len(species))])
+
+        struc = Structure(self._avec, species[idx], self._coo[idx])
+        poscar = Poscar(struc)
+        poscar.write_file(file_name)
+
     def save_cluster(self, cluster, file_name="CLUSTER.vasp",
                      sort_species=True):
         """
