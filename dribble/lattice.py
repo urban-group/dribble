@@ -19,6 +19,7 @@ A class to represent lattices.
 from __future__ import print_function, division, unicode_literals
 
 import numpy as np
+import sys
 
 from .nblist import NeighborList
 
@@ -443,39 +444,47 @@ class Lattice(object):
 
     def get_nnn_shells(self, dr=0.1):
         """
-        Calculate shells of next nearest neighbors and store them
-        in `nnn'.
+        Calculate shells of next nearest neighbors and store them in `nnn'.
+
+        Note: This routine requires cells that are actually large enough
+              to contain the next-nearest neighbor shells.
+
         """
 
         nnn = []
         T_nnn = []
         N_nnn = np.empty(self._nsites, dtype=int)
 
-        pbcdist = self._nblist.get_pbc_distances_and_translations
-        for i in range(self._nsites):
-            nn_i = self._nn[i]
-            nnnb = set([])
-            for j in nn_i:
-                nn_j = self._nn[j]
-                nnnb |= set(nn_j) - set(nn_i) - {i}
-            nnnb = list(nnnb)
-            (dist, Tvecs) = pbcdist(i, nnnb[0])
-            dmin = dist[0]
-            nnn_i = []
-            T_nnn_i = []
-            for j in nnnb:
-                (dist, Tvec) = pbcdist(i, j)
-                for k in range(len(dist)):
-                    if (dist[k] < dmin - dr):
-                        nnn_i = [j]
-                        T_nnn_i = [Tvec[k]]
-                        dmin = dist[k]
-                    elif (dist[k] <= dmin + dr):
-                        nnn_i.append(j)
-                        T_nnn_i.append(Tvec[k])
-            nnn.append(nnn_i)
-            T_nnn.append(T_nnn_i)
-            N_nnn[i] = len(nnn_i)
+        try:
+            pbcdist = self._nblist.get_pbc_distances_and_translations
+            for i in range(self._nsites):
+                nn_i = self._nn[i]
+                nnnb = set([])
+                for j in nn_i:
+                    nn_j = self._nn[j]
+                    nnnb |= set(nn_j) - set(nn_i) - {i}
+                nnnb = list(nnnb)
+                (dist, Tvecs) = pbcdist(i, nnnb[0])
+                dmin = dist[0]
+                nnn_i = []
+                T_nnn_i = []
+                for j in nnnb:
+                    (dist, Tvec) = pbcdist(i, j)
+                    for k in range(len(dist)):
+                        if (dist[k] < dmin - dr):
+                            nnn_i = [j]
+                            T_nnn_i = [Tvec[k]]
+                            dmin = dist[k]
+                        elif (dist[k] <= dmin + dr):
+                            nnn_i.append(j)
+                            T_nnn_i.append(Tvec[k])
+                nnn.append(nnn_i)
+                T_nnn.append(T_nnn_i)
+                N_nnn[i] = len(nnn_i)
+        except IndexError:
+            sys.stderr.write("Error: Could not determine next-nearest "
+                             "neighbor shells.  Try larger supercell.\n")
+            sys.exit()
 
         self._nnn = nnn
         self._T_nnn = T_nnn
@@ -496,8 +505,8 @@ class Lattice(object):
 
         """
 
-        from pymatgen.core.structure import Structure
-        from pymatgen.io.vaspio import Poscar
+        from pymatgen.core import Structure
+        from pymatgen.io.vasp.inputs import Poscar
 
         species = [vacant for i in range(self._nsites)]
         for i in self._occupied:
