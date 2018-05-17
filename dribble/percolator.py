@@ -268,8 +268,8 @@ class Percolator(object):
             species = [self.lattice.species[i] for i in occupied]
 
         # completely reset lattice
-        # _occupied[i]    i-th occupied site
-        # _vacant[i]      i-th vacant site
+        # occupied[i]    i-th occupied site
+        # vacant[i]      i-th vacant site
         self.cluster[:] = -1
         self.occupied = []
         self.vacant = list(range(self._nsites))
@@ -364,18 +364,17 @@ class Percolator(object):
         return [nb for nb in self.neighbors[site1]
                 if nb in self.neighbors[site2]]
 
-    def get_cluster_of_site(self, site, vec=[0, 0, 0], visited=[]):
+    def get_cluster_of_site(self, site, first=True, visited=[]):
         """
         Recursively determine all sites connected to a given site.
 
         Args:
           site (int): ID of the input site
-          vec (list or array): Vector pointing from the head of the cluster
-              to the site
+          first (bool): True for first call
           visited (list): List of sites that have already been visited
               by recursion
 
-          `vec` and `visited` do not have to be specified manually but
+          `site0` and `visited` do not have to be specified manually but
           are only used in the recursive calls to this method.
 
         Returns:
@@ -390,21 +389,29 @@ class Percolator(object):
             # vacant site (why are we here?)
             return visited
 
+        if len(self.lattice._nbshells[site]) > 1:
+            raise NotImplementedError(
+                "Not implemented for multiple neighbor shells.")
+
+        if first:
+            self._vec[site] = np.array([0.0, 0.0, 0.0])
+
         nspanning = np.array([0, 0, 0], dtype=int)
         newsites = [site]
 
         for i in range(len(self.neighbors[site])):
             nb = self.neighbors[site][i]
             # neighboring site occupied and bound?
-            if ((self.cluster[nb] >= 0) and self._check_bond(site, nb)):
+            # if ((self.cluster[nb] >= 0) and self._check_bond(site, nb)):
+            if ((self.cluster[nb] >= 0) and self.bond[site][i]):
                 # vector to origin
                 T = self._T_vectors[site][i]
                 v_12 = (self._coo[nb] + T) - self._coo[site]
-                vec_nb = vec + v_12
+                vec_nb = self._vec[site] + v_12
                 if not (nb in visited+newsites):
                     self._vec[nb] = vec_nb
                     (subcluster, subspan
-                     ) = self.get_cluster_of_site(nb, vec_nb, visited+newsites)
+                     ) = self.get_cluster_of_site(nb, False, visited+newsites)
                     newsites += subcluster
                     nspanning += subspan
                 else:
@@ -453,7 +460,7 @@ class Percolator(object):
         num_clusters = 0
 
         for i in range(self._nsites):
-            if (self.cluster[i] > 0) and not (i in visited):
+            if (self.cluster[i] >= 0) and not (i in visited):
                 (cluster, spanning) = self.get_cluster_of_site(i)
                 visited += cluster
                 if np.sum(spanning) > 0:
@@ -1158,7 +1165,8 @@ class Percolator(object):
           site1 (int): Contact site of the first cluster
           cluster2 (int): ID of the second cluster
           site2 (int): Contact site of the second cluster
-          T2 (array): vector connecting the two sites
+          T2 (array): translation vector connecting of site 2 relative
+              to site 1
           site_rules (dict): site rules to be used; if not given, use
               the default rules
           bond_rules (dict): bond rules to be used; if not given, use
@@ -1188,14 +1196,32 @@ class Percolator(object):
             self.bond[site2][nb2] = True
             self.num_bonds += 1
 
-        # vector from head node of cluster2 to head of cluster1
+        # This method could be further simplified by reading T2 here
+        # instead of passing an arg since (T2 == self._T_vectors[site1][nb1])
+        # if not all(T2 - self._T_vectors[site1][nb1] == 0):
+        #     print("Error: {} {} ".format(site1, site2))
+
+        # The detection of the wrapping condition follows
+        # Newman and Ziff, Phys. Rev. Lett. 85, 4104-4107 (2000).
+        # The idea is that at least one bond in a wrapping cluster has
+        # to cross the periodic bounds of the cell.  A cluster is wrapping
+        # when a bond is formed with a periodic image of a site that is
+        # already part of the cluster.
+
+        # # vector connecting site1 and site2
+        # v_12 = (self._coo[site2] + T2) - self._coo[site1]
+        # # vector to site2 in basis of cluster1
+        # r2_1 = self._vec[site1] + v_12
+        # # vector to site2 in basis of cluster2
+        # r2_2 = self._vec[site2]
+        # # the difference between the two
+        # vec = r2_1 - r2_2  # = self._vec[site1] + v_12 - self._vec[site2]
+
+        # # vector from head node of cluster2 to head of cluster1
         v_12 = (self._coo[site2] + T2) - self._coo[site1]
         vec = self._vec[site1] - v_12 - self._vec[site2]
 
         if (cluster1 == cluster2):
-            # if `vec' is different from the stored vector, we have
-            # a wrapping cluster, i.e. we found the periodic image of
-            # a site that is already part of the cluster
             wrapping1 = np.sum(self.wrapping[cluster1])
             if abs(vec[0]) > 0.5:
                 self.wrapping[cluster1][0] += 1
@@ -1254,10 +1280,11 @@ class Percolator(object):
 
         # keep track of the cluster sizes and the largest cluster
         self.cluster_size[cluster1] += self.cluster_size[cluster2]
-        if (self.cluster_size[cluster1] > self.cluster_size[self.largest_cluster]):
+        if (self.cluster_size[cluster1]
+                > self.cluster_size[self.largest_cluster]):
             self.largest_cluster = cluster1
 
-        # keep track of the wrapping property
+        # keep track of the wrapping paths
         l1 = self.wrapping[cluster1]
         l2 = self.wrapping[cluster2]
         self.wrapping[cluster1] = l1 + l2
