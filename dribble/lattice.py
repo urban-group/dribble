@@ -89,6 +89,8 @@ class Lattice(object):
         self.species = []
         self._static = []
 
+        self.occupying_species = occupying_species
+
         self.num_formula_units = formula_units
         self.num_formula_units *= supercell[0]*supercell[1]*supercell[2]
 
@@ -352,6 +354,25 @@ class Lattice(object):
             comp[s] = self.concentration(s)*f
         return comp
 
+    def set_site(self, site, species):
+        """
+        Occupy a given site with a given species and update all data
+        structures.
+
+        """
+
+        # keep track of "occupied" and "vacant" sites
+        if species in self.occupying_species:
+            if site in self._vacant:
+                del self._vacant[self._vacant.index(site)]
+                self._occupied.append(site)
+        else:
+            if site in self._occupied:
+                del self._occupied[self._occupied.index(site)]
+                self._vacant.append(site)
+
+        self.species[site] = species
+
     def check_if_neighbors(self, sites):
         """
         Check whether all sites in a set are neighbors.
@@ -427,6 +448,13 @@ class Lattice(object):
             for species in concentrations[sl]:
                 c = concentrations[sl][species]
                 num_sites_species = int(round(c*num_sites))
+                c2 = num_sites_species/num_sites
+                if (abs(c - c2) > 1.0e-6):
+                    sys.stderr.write(
+                        "Warning: Could not exactly realize "
+                        "concentration of species '{}.'\n".format(species)
+                        + "         Requested: {}  Actual: {}\n".format(c, c2)
+                        + "         Try larger supercell.\n")
                 decoration += [species for i in range(num_sites_species)]
             while len(decoration) < num_sites:
                 decoration.append(decoration[-1])
@@ -495,7 +523,7 @@ class Lattice(object):
 
     def save_structure(self, file_name="CONTCAR", vacant="V", occupied="O"):
         """
-        Save current occupation to an output file.
+        Save current occupation to an output file in VASP's POSCAR format.
         Relies on `pymatgen' for the file I/O.
 
         Arguments:
@@ -503,14 +531,27 @@ class Lattice(object):
           vacant       atomic species to be placed at vacant sites
           occupied     atomic species to be placed at occupied sites
 
+          Note: `vacant` and `occupied` are only used if the species are
+                not explicitly defined when the Lattice instance is created.
+
+          Note: Sites are grouped (sorted) by species, so the order of
+                sites in the saved POSCAR file is likely different from
+                the original input file.
+
         """
 
-        from pymatgen.core import Structure
-        from pymatgen.io.vasp.inputs import Poscar
+        try:
+            from pymatgen.core import Structure
+            from pymatgen.io.vasp.inputs import Poscar
+        except ImportError:
+            sys.stderr.write("Writing POSCAR files requires `pymatgen`.\n")
 
-        species = [vacant for i in range(self._nsites)]
-        for i in self._occupied:
-            species[i] = occupied
+        if len(self.species) == 0:
+            species = [vacant for i in range(self._nsites)]
+            for i in self._occupied:
+                species[i] = occupied
+        else:
+            species = self.species[:]
 
         species = np.array(species)
         idx = np.argsort(species)
