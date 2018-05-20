@@ -40,14 +40,15 @@ def uprint(string, **kwargs):
 
 class ProgressBar(object):
 
-    def __init__(self, N, char=u"\u25ae"):
+    def __init__(self, N, width=80, char=u"\u25ae"):
         """
         Start a simple ASCII progress bar to indicate the progress
         of the MC calculation.  Use together with _print_progress_bar.
 
         Arguments:
-          N     number of samples until 100%
-          char  the character used to draw the progress bar
+          N (int): Number of samples until 100%
+          width (int): Width in characters
+          char (char): The character used to draw the progress bar
         """
 
         uprint(" 0%                25%                 "
@@ -55,9 +56,11 @@ class ProgressBar(object):
         uprint(" ", end="")
 
         self._steps = N
-        self._nprint = int(max(round(float(N)/80.0), 1))
-        self._nchar = int(max(round(80.0/float(N)), 1))
+        self._width = width
+        self._increment = float(width)/float(N)
         self._char = char[0]
+        self._length = 0
+        self._buffer = 0.0
         self._count = -1
 
     def __call__(self):
@@ -66,6 +69,7 @@ class ProgressBar(object):
         """
 
         self._count += 1
+        self._buffer += self._increment
 
         if self._count == self._steps:
             uprint(" done.\n")
@@ -74,8 +78,11 @@ class ProgressBar(object):
         if self._count > self._steps:
             return
 
-        if (self._count % self._nprint == 0):
-            uprint(self._nchar*self._char, end="")
+        if (self._buffer > 1.0):
+            N = min(int(self._buffer), self._width-self._length)
+            self._buffer -= N
+            self._length += N
+            uprint(N*self._char, end="")
 
 
 def sigmoidal1(x, x0, y0, A, c):
