@@ -17,7 +17,10 @@ Parse JSON input files with percolation rules, site labels, etc.
 """
 
 from __future__ import print_function, division, unicode_literals
+
 import json
+from warnings import warn
+
 from pymatgen.io.vasp import Poscar
 from pymatgen import Structure
 
@@ -103,10 +106,7 @@ class Input(object):
             self.input_structure = Poscar.from_file(
                 self.structure_path).structure
 
-        if percolating_species is None:
-            raise KeyError("No percolating species specified.")
-        else:
-            self.percolating_species = percolating_species
+        self.percolating_species = percolating_species
 
         self.cutoff = cutoff
         self.static_species = [] if static_species is None else static_species
@@ -176,24 +176,25 @@ class Input(object):
         return cls(**input_dict)
 
     def __str__(self):
-        out = "Percolation Simulation Input:"
-        out += "\n  Percolating species: " + ", ".join(
+        out = " Dribble Input\n"
+        out += " -------------\n"
+        out += "\n Percolating species: " + ", ".join(
             self.percolating_species)
-        out += "\n  Static species: " + ", ".join(self.static_species)
-        out += "\n  Cutoff: {}".format(self.cutoff)
-        out += "\n  Formula units: {}".format(self.formula_units)
-        out += "\n  Flip sequence: " + ", ".join(
+        out += "\n Static species     : " + ", ".join(self.static_species)
+        out += "\n Cutoff             : {}".format(self.cutoff)
+        out += "\n Formula units      : {}".format(self.formula_units)
+        out += "\n Flip sequence      : " + ", ".join(
             ["{} --> {}".format(a, b) for a, b in self.flip_sequence])
-        out += "\n  Sublattices: " + ", ".join(
+        out += "\n Sublattices        : " + ", ".join(
             [s for s in self.sublattices])
-        out += "\n  Bonds: " + ", ".join(
+        out += "\n Bonds              : " + ", ".join(
             [str(self.bonds[b]) for b in self.bonds])
         return out
 
     @property
     def mg_structure(self):
-        warnings.warn("'mg_structure' has been depricated in favor of the "
-                      "'structure' attribute.",  DeprecationWarning)
+        warn("'mg_structure' has been depricated in favor of the "
+             "'structure' attribute.",  DeprecationWarning)
         return self.structure
 
     @property
