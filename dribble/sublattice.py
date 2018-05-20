@@ -33,30 +33,51 @@ class Bond(object):
     dictionary keys.  Bonds are not directional, i.e., always
     Bond(A, B) == Bond(B, A).
 
+    Attributes:
+      sublattices (set): Set of the sublattice A and B
+      bond_rules (list): List of bond rules (see rules.py)
+      interactions (dict): Species-dependent interaction energies as
+          interactions[{"A", "B"}]
+
+    Methods:
+      energy(A, B): Returns the interaction energy for species A and B
+          if available and 0 otherwise; the order of A and B does not matter
+
     """
 
-    def __init__(self, sublattice1, sublattice2, bond_rules=None):
+    def __init__(self, sublattice1, sublattice2, bond_rules=None,
+                 interactions=None):
         """
         Arguments:
           sublattices (set or list): labels of the sublattices that the
             sites connected by the bond belong to.
           bond_rules (list): list of bond rules (see rules.py) that
             have to be fulfilled for this bond to be percolating
+          interactions (list): interaction energies for pairs of species
+            and the present bond; each interaction is a dict of form:
+            {"species": ["A", "B"], "energy": E}
 
         """
 
         self.sublattices = frozenset([sublattice1, sublattice2])
         self.bond_rules = []
+        self.interactions = {}
+
         if bond_rules is not None:
             for br in bond_rules:
                 rule = getattr(rules, br[0])
                 args = br[1] if len(br) > 1 else {}
                 self.bond_rules.append(rule(**args))
 
+        if interactions is not None:
+            for ia in interactions:
+                self.interactions[frozenset(ia["species"])] = ia["energy"]
+
     def __eq__(self, other):
-        if not hasattr(other, 'sublattices'):
-            return False
-        return self.sublattices == other.sublattices
+        if hasattr(other, 'sublattices'):
+            return self.sublattices == other.sublattices
+        else:
+            return self.sublattices == other
 
     def __ne__(self, other):
         return not self == other
@@ -83,7 +104,32 @@ class Bond(object):
             bond_rules = bond_dict["bond_rules"]
         else:
             bond_rules = None
-        return cls(sublattice1, sublattice2, bond_rules=bond_rules)
+        if "interactions" in bond_dict:
+            interactions = bond_dict["interactions"]
+        else:
+            interactions = None
+        return cls(sublattice1, sublattice2, bond_rules=bond_rules,
+                   interactions=interactions)
+
+    def energy(self, A, B):
+        """
+        Interaction energy for the present bond and species A and B.
+
+        Args:
+          A, B (str): The bond-forming species
+
+        Returns:
+          energy (float): If an interaction energy for the two species is
+              defined it will be returned.  Otherwise, 0 is returned.
+
+        """
+
+        AB = frozenset([A, B])
+        if AB in self.interactions:
+            energy = self.interactions[AB]
+        else:
+            energy = 0.0
+        return energy
 
 
 class Sublattice(object):
