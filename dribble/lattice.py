@@ -85,6 +85,7 @@ class Lattice(object):
         self._occup = []
         self._occupied = []
         self._vacant = []
+        self.supercell = supercell
         self.site_labels = []
         self.species = []
         self._static = []

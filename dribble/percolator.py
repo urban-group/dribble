@@ -976,7 +976,7 @@ class Percolator(object):
                 pc_bond_any, pc_bond_two, pc_bond_all)
 
     def save_structure(self, file_name="percolating_sites.vasp",
-                       sort_species=True, label="P"):
+                       sort_species=True, label="P", static_sites=None):
         """
         Save the current lattice decoration to an output file, labeling all
         sites that are connected to percolating clusters (if
@@ -987,6 +987,11 @@ class Percolator(object):
           sort_species (bool): if True, the coordinates will be sorted
             by species in the POSCAR file
           label (str): Species to be used to indicate percolating sites.
+          static_sites (structure): A pymatgen Structure object with additional
+            sites that should be included in the saved structure but were
+            not used in the percolation simulation.  A matching supercell
+            sill be generated automatically based on the supercell used
+            for the percolation simulation.
 
         """
 
@@ -1003,6 +1008,12 @@ class Percolator(object):
             idx = np.array([i for i in range(len(species))])
 
         struc = Structure(self._avec, species[idx], self._coo[idx])
+
+        if static_sites:
+            struc2 = static_sites.copy()
+            struc2.make_supercell(self.lattice.supercell)
+            struc = Structure.from_sites(struc.sites + struc2.sites)
+
         poscar = Poscar(struc)
         poscar.write_file(file_name)
 

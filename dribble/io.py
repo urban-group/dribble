@@ -138,6 +138,13 @@ class Input(object):
         active_sites.sort()
         self.structure = Structure.from_sites(
             [self.input_structure[i] for i in active_sites])
+        if len(active_sites) < self.input_structure.num_sites:
+            inactive_sites = [i for i in range(self.input_structure.num_sites)
+                              if i not in active_sites]
+            self.static_sites = Structure.from_sites(
+                [self.input_structure[i] for i in inactive_sites])
+        else:
+            self.static_sites = None
 
         # assign a sublattice label to each site in the reduced structure
         self.site_labels = ["" for i in active_sites]
