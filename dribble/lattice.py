@@ -32,7 +32,7 @@ class Lattice(object):
     def __init__(self, lattice_vectors, frac_coords,
                  supercell=(1, 1, 1), NN_range=None, site_labels=None,
                  species=None, occupying_species=[], static_species=[],
-                 concentrations=None, formula_units=1):
+                 concentrations=None, formula_units=1, neighbor_list=None):
         """
         Arguments:
           lattice_vectors    3x3 matrix with lattice vectors in rows
@@ -52,6 +52,8 @@ class Lattice(object):
                               "B": {"Co": 1.0}}
           formula_units      Number of formula units in input structure
                              (only used to compute compositions)
+          neighbor_list      Can re-use the neighbor list from another
+                             Lattice object if passed here.
 
         """
 
@@ -144,18 +146,31 @@ class Lattice(object):
         self._static_occupied = list(set(self._static) & set(self._occupied))
 
         # initialization of the neighbor list
-        self._nblist = []
-        self._dNN = []
-        self._nn = []
-        self._nnn = []
-        self._T_nn = []
-        self._T_nnn = []
-        self._N_nn = 0
-        self._N_nnn = 0
-        self._nsurface = 0
-        self._nbshells = []
-        self._nbshell_dist = []
-        self._build_neighbor_list(r_NN=NN_range)
+        if neighbor_list:
+            self._nblist = neighbor_list._nblist
+            self._dNN = neighbor_list._dNN
+            self._nn = neighbor_list._nn
+            self._nnn = neighbor_list._nnn
+            self._T_nn = neighbor_list._T_nn
+            self._T_nnn = neighbor_list._T_nnn
+            self._N_nn = neighbor_list._N_nn
+            self._N_nnn = neighbor_list._N_nnn
+            self._nsurface = neighbor_list._nsurface
+            self._nbshells = neighbor_list._nbshells
+            self._nbshell_dist = neighbor_list._nbshell_dist
+        else:
+            self._nblist = []
+            self._dNN = []
+            self._nn = []
+            self._nnn = []
+            self._T_nn = []
+            self._T_nnn = []
+            self._N_nn = 0
+            self._N_nnn = 0
+            self._nsurface = 0
+            self._nbshells = []
+            self._nbshell_dist = []
+            self._build_neighbor_list(r_NN=NN_range)
 
     @classmethod
     def from_structure(cls, structure, site_labels=None, **kwargs):
