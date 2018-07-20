@@ -20,6 +20,7 @@ from __future__ import print_function, division, unicode_literals
 
 import json
 from warnings import warn
+import numpy as np
 
 from pymatgen.io.vasp import Poscar
 from pymatgen import Structure
@@ -89,7 +90,7 @@ class Input(object):
     def __init__(self, structure=None, percolating_species=None,
                  cutoff=None, static_species=None, flip_sequence=None,
                  formula_units=1, sublattices=None, bonds=None,
-                 **kwargs):
+                 sort_sites=False, **kwargs):
         """
         Args:
           The constructor takes as arguments the same keys expected in
@@ -105,6 +106,12 @@ class Input(object):
             self.structure_path = structure
             self.input_structure = Poscar.from_file(
                 self.structure_path).structure
+
+        if sort_sites:
+            idx = np.lexsort(
+                np.array([s.coords for s in self.input_structure]).T)
+            sites = [self.input_structure[i] for i in idx]
+            self.input_structure = Structure.from_sites(sites)
 
         self.percolating_species = percolating_species
 
