@@ -997,6 +997,11 @@ class Percolator(object):
 
         from pymatgen.core.structure import Structure
         from pymatgen.io.vasp.inputs import Poscar
+        try:
+            import strucconv as sc
+            has_sc = True
+        except ImportError:
+            has_sc = False
 
         species = np.array(self.lattice.species[:])
         for site in self.percolating_sites:
@@ -1014,8 +1019,12 @@ class Percolator(object):
             struc2.make_supercell(self.lattice.supercell)
             struc = Structure.from_sites(struc.sites + struc2.sites)
 
-        poscar = Poscar(struc)
-        poscar.write_file(file_name)
+        if has_sc:
+            s = sc.geometry.AtomicStructure.from_pymatgen_structure(struc)
+            sc.io.write(s, filename=file_name, frmt="vasp")
+        else:
+            poscar = Poscar(struc)
+            poscar.write_file(file_name)
 
     def save_cluster(self, cluster, file_name="CLUSTER.vasp",
                      sort_species=True):
