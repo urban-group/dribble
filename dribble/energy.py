@@ -35,16 +35,18 @@ class Metropolis(object):
 
     """
 
-    def __init__(self, lattice, bonds):
+    def __init__(self, lattice, sublattices, bonds):
         """
         Args:
           lattice: Instance of lattice.Lattice
+          sublattices (dict): Dict of sublattices (sublattice.Sublattice)
           bonds (dict): Dict with sublattice.Bond for each pair of
               sublattices A and B
 
         """
 
         self.lattice = lattice
+        self.sublattices = sublattices
         self.bonds = bonds
         self.energy = self.eval_total_energy()
 
@@ -210,6 +212,15 @@ class Metropolis(object):
         species2 = self.lattice.species[site2]
         return (site1, species1, site2, species2)
 
+    def grand_canonical_draw_site(self):
+        site = random.randrange(self.lattice.num_sites)
+        sl = self.lattice.site_labels[site]
+        species_orig = self.lattice.species[site]
+        species_other = [s for s in self.sublattices[sl].allowed_species
+                         if s != species_orig]
+        species_new = np.random.choice(species_other)
+        return (site, species_orig, species_new)
+
     def canonical_mc_step(self, beta, num_flips=None):
         """
         Perform a single canonical (N, V, T) Monte Carlo step consisting of
@@ -239,6 +250,42 @@ class Metropolis(object):
             if (dE < 0.0) or (p[i] <= exp(-dE*beta)):
                 self.lattice.set_site(site1, species2)
                 self.lattice.set_site(site2, species1)
+                self.energy += dE
+                num_accepted += 1
+        return num_accepted/N
+
+    def grand_canonical_mc_step(self, beta, mu, num_flips=None):
+        """
+        Perform a single grand-canonical (mu, V, T) Monte Carlo step
+        consisting of a series of flips that may change the overall
+        concentration of any species.
+
+        This method updates the lattice occupancy, the `energy`
+        attribute, and the 'grand_potential' attribute.
+
+        Args:
+          beta (float): Thermodynamic beta, i.e., 1/(kB*T), where kB is
+              Boltzmann's constant and T is the temperature.
+          mu (dict): Chemical potentials for all atomic species.
+          num_flips (int): Number of double flips.  If not specified, the
+              number of flips will be set to the total number of sites.
+
+        Returns:
+          num_accepted/num_flips (float): Fraction of accepted flips
+
+        """
+
+        N = self.lattice.num_sites if num_flips is None else num_flips
+        p = np.random.random(N)  # at most N random numbers will be needed
+        num_accepted = 0
+        for i in range(N):
+            (site, species_orig, species_new
+             ) = self.grand_canonical_draw_site()
+            dE = self.flip_energy(site, species_new)
+            dO = dE + mu[species_new] - mu[species_orig]
+            # accept flip with Metropolis condition
+            if (dO < 0.0) or (p[i] <= exp(-dO*beta)):
+                self.lattice.set_site(site, species_new)
                 self.energy += dE
                 num_accepted += 1
         return num_accepted/N
