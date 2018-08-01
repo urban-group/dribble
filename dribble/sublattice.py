@@ -163,6 +163,7 @@ class Sublattice(object):
         self.structure = structure
         self.description = description
         self.ignore = ignore
+        self.allowed_species = None
 
         self.site_rules = []
         if site_rules is not None:
@@ -175,6 +176,7 @@ class Sublattice(object):
             self.sites = [int(s)-1 for s in sites]
         except ValueError:
             if "species" in sites:
+                self.allowed_species = set(sites["species"])
                 self.sites = [i for i, s in enumerate(self.structure)
                               if s.specie.symbol in sites["species"]]
 
@@ -187,6 +189,11 @@ class Sublattice(object):
             if len(species) != self.num_sites:
                 raise ValueError("Number of species != number of sites.")
             self.species = species
+
+        if self.allowed_species is None:
+            self.allowed_species = set(self.species)
+            if initial_occupancy is not None:
+                self.allowed_species |= set(initial_occupancy.keys())
 
         self.initial_occupancy = initial_occupancy
         if self.initial_occupancy is not None:
