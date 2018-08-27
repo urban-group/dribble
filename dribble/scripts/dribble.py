@@ -33,7 +33,7 @@ from dribble.misc import uprint
 __author__ = "Alexander Urban"
 
 
-def check_if_percolating(percolator, save_clusters):
+def check_if_percolating(percolator, save_clusters, tortuosity):
     noccup = percolator.num_occupied
     nspan = percolator.check_spanning(verbose=True,
                                       save_clusters=save_clusters)
@@ -41,6 +41,12 @@ def check_if_percolating(percolator, save_clusters):
         uprint(" The initial structure is percolating.\n")
         uprint(" Fraction of accessible sites: {}\n".format(
             float(nspan)/float(noccup)))
+        if tortuosity:
+            for c in percolator.percolating_clusters:
+                t_min, t_mean, t_std = percolator.get_tortuosity(c)
+                uprint(" Tortuosity of cluster {} (min, mean): ".format(c)
+                       + "{}, {} +/- {}".format(t_min, t_mean, t_std))
+            uprint("")
     else:
         uprint(" The initial structure is NOT percolating.\n")
         uprint(" Fraction of accessible sites: 0.0\n")
@@ -125,11 +131,30 @@ def calc_inaccessible_sites(percolator, samples, save_raw, file_name,
                 plist[p], F_inacc[p], nclus[p]))
 
 
+def calc_mean_tortuosity(percolator, samples, save_raw, file_name,
+                         sequence):
+    plist = np.arange(0.01, 1.00, 0.01)
+    F_tort = percolator.mean_tortuosity(
+        plist, sequence, samples=samples,
+        save_discrete=save_raw)
+
+    fname = file_name + ".tortuosity"
+    uprint(" Writing results to: {}\n".format(fname))
+
+    with open(fname, 'w') as f:
+        f.write("# {:^10s}   {:>10s}\n".format(
+            "p", "Tortuosity(p)"))
+        for p in range(len(plist)):
+            f.write("  {:10.8f}   {:10.8f}\n".format(
+                plist[p], F_tort[p]))
+
+
 def compute_percolation(input_file, structure_file, samples,
                         save_clusters, save_raw, file_name, pc, check,
-                        pinf, pwrap, inaccessible, supercell):
+                        pinf, pwrap, inaccessible, tortuosity,
+                        mean_tortuosity, supercell):
 
-    if not (check or pc or pinf or pwrap or inaccessible):
+    if not (check or pc or pinf or pwrap or inaccessible or mean_tortuosity):
         print("\n Nothing to do.")
         print(" Please specify the quantity to be calculated.")
         print(" Use the `--help' flag to list all options.\n")
@@ -156,7 +181,7 @@ def compute_percolation(input_file, structure_file, samples,
     uprint("\n MC percolation simulation\n -------------------------\n")
 
     if check:  # check, if initial structure is percolating
-        check_if_percolating(percolator, save_clusters)
+        check_if_percolating(percolator, save_clusters, tortuosity)
     if pc:  # calculate critical site concentrations
         calc_critical_concentration(percolator, save_clusters, samples,
                                     file_name, inp.flip_sequence)
@@ -170,6 +195,9 @@ def compute_percolation(input_file, structure_file, samples,
         calc_inaccessible_sites(percolator, samples, save_raw,
                                 file_name, inp.flip_sequence,
                                 inaccessible)
+    if mean_tortuosity:  # tortuosity as function of concentration
+        calc_mean_tortuosity(percolator, samples, save_raw,
+                             file_name, inp.flip_sequence)
 
     dt = time.gmtime(time.clock())
     uprint(" All done.  Elapsed CPU time: {:02d}h{:02d}m{:02d}s\n".format(
@@ -228,6 +256,13 @@ def main():
         action="store_true")
 
     parser.add_argument(
+        "--tortuosity", "-t",
+        help="Compute tortuosity of the percolating clusters as function "
+             "of the concentration.  Together with '--check', only compute "
+             "tortuosity of the input structure.",
+        action="store_true")
+
+    parser.add_argument(
         "--samples",
         help="number of samples to be averaged",
         type=int,
@@ -258,6 +293,11 @@ def main():
     if args.debug:
         np.random.seed(seed=1)
 
+    if args.tortuosity and not args.check:
+        mean_tortuosity = True
+    else:
+        mean_tortuosity = False
+
     compute_percolation(input_file=args.input_file,
                         structure_file=args.structure_file,
                         samples=args.samples,
@@ -269,6 +309,8 @@ def main():
                         pinf=args.pinf,
                         pwrap=args.pwrap,
                         inaccessible=args.inaccessible,
+                        tortuosity=args.tortuosity,
+                        mean_tortuosity=mean_tortuosity,
                         supercell=args.supercell)
 
 
