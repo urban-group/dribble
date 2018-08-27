@@ -23,6 +23,7 @@ import sys
 
 from sys import stderr
 from scipy.stats import binom
+from scipy.sparse import csgraph
 
 from .misc import uprint
 from .misc import ProgressBar
@@ -489,6 +490,180 @@ class Percolator(object):
             uprint("")
 
         return nspanning
+
+    def get_tortuosity(self, cluster_id, verbose=False):
+        """
+        Calculate tortuosity of a (percolating) cluster.
+
+        Arguments:
+          cluster_id (int): ID of a percolating cluster
+
+        Returns:
+          Tuple: (min_tortuosity, mean_tortuosity, std_tortuosity)
+
+        The algorithm used is as follows:
+        0. Check if the cluster is percolating and return np.infty if not
+        1. For each site in the cluster, determine the shortest path
+           connecting the site with one of its periodic images
+        2. Tortuosity is: tau = (path length)/(distance)
+        3. Return lowest and mean tortuosity
+
+        Warning: This method is not optimized and is currently highly
+                 inefficient.  Use for small structure models only.
+
+        """
+
+        if not any(self.wrapping[cluster_id] > 0):
+            # cluster is periodically wrapping
+            return (np.infty, np.infty, 0.0)
+
+        # all sites of the selected cluster
+        cluster_sites = self.get_sites_of_cluster(cluster_id)
+
+        # each site and its periodic images
+        Tvecs = [(i, j, k) for i in (-1, 0, 1)
+                 for j in (-1, 0, 1)
+                 for k in (-1, 0, 1)]
+        Tvec_len = [np.linalg.norm(np.dot(T, self._avec)) for T in Tvecs]
+        pbc_cluster_sites = []
+        for site in cluster_sites:
+            for T in Tvecs:
+                pbc_cluster_sites.append((site, T))
+
+        # reverse mapping
+        site_id = {(site, T): i for i, (site, T)
+                   in enumerate(pbc_cluster_sites)}
+
+        # Now represent the cluster as a graph
+        # Matrix representation of graph; connected sites have an edge
+        # weight corresponding to their distance; unconnected sites have
+        # a weight of 0.0 see also:
+        # docs.scipy.org/doc/scipy/reference/sparse.csgraph.html
+        G = np.zeros((len(pbc_cluster_sites), len(pbc_cluster_sites)))
+        for i, (site, T) in enumerate(pbc_cluster_sites):
+            for inb, nb in enumerate(self.neighbors[site]):
+                T_nb = self._T_vectors[site][inb] + np.array(T)
+                nb_site = (nb, tuple(T_nb))
+                if nb_site in site_id:
+                    j = site_id[nb_site]
+                    v_ij = (self._coo[nb] + T_nb
+                            ) - (self._coo[site] + np.array(T))
+                    dist = np.linalg.norm(np.dot(v_ij, self._avec))
+                    G[i, j] = G[j, i] = dist
+
+        # get shortest paths between each pairs of sites
+        dist_matrix = csgraph.shortest_path(G)
+
+        # now compute tortuosity for each shortest path between a site
+        # and its periodic images
+        tortuosity = [np.infty for site in cluster_sites]
+        for isite, site in enumerate(cluster_sites):
+            i = site_id[(site, (0, 0, 0))]
+            for iT, T in enumerate(Tvecs):
+                j = site_id[(site, T)]
+                if i != j:
+                    # the distance between the end points is the length of T
+                    D = Tvec_len[iT]
+                    # tortuosity
+                    t = dist_matrix[i, j]/D
+                    tortuosity[isite] = min(tortuosity[isite], t)
+            if verbose:
+                print("  Site {}: Tortuosity = {}".format(
+                    site, tortuosity[isite]))
+
+        return (np.min(tortuosity), np.mean(tortuosity), np.std(tortuosity))
+
+    def get_tortuosity_slow(self, cluster_id, verbose=False):
+        """
+        Calculate tortuosity of a (percolating) cluster.
+
+        Arguments:
+          cluster_id (int): ID of a percolating cluster
+
+        Returns:
+          Tuple: (min_tortuosity, mean_tortuosity, std_tortuosity)
+
+        The algorithm used is as follows:
+        0. Check if the cluster is percolating and return np.infty if not
+        1. For each site in the cluster, determine the shortest path
+           connecting the site with one of its periodic images
+        2. Tortuosity is: tau = (path length)/(distance)
+        3. Return lowest and mean tortuosity
+
+        Warning: This method is not optimized and is currently highly
+                 inefficient.  Use for small structure models only.
+
+        """
+
+        if not any(self.wrapping[cluster_id] > 0):
+            # cluster is periodically wrapping
+            return (np.infty, np.infty, 0.0)
+
+        # all sites of the selected cluster
+        cluster_sites = self.get_sites_of_cluster(cluster_id)
+
+        # translation vector star and length of each vector
+        star = [(i, j, k) for i in (-1, 0, 1)
+                for j in (-1, 0, 1)
+                for k in (-1, 0, 1)]
+        star.remove((0, 0, 0))
+        T_len = [np.linalg.norm(np.dot(T, self._avec)) for T in star]
+
+        def get_shortest_path(site, path=[], pathlen=0.0,
+                              vec=np.array([0.0, 0.0, 0.0]),
+                              tortuosity_opt=np.infty):
+            """ Recursively search shortest closed path """
+            path_opt = None
+            pathlen_opt = None
+            vec_opt = None
+            for i, nb in enumerate(self.neighbors[site]):
+                if nb in cluster_sites and tortuosity_opt > 1.0:
+                    path_nb = path + [site]
+                    T = self._T_vectors[site][i]
+                    v_12 = (self._coo[nb] + T) - self._coo[site]
+                    vec_nb = vec + v_12
+                    v_12_cart = np.dot(v_12, self._avec)
+                    pathlen_nb = pathlen + np.linalg.norm(v_12_cart)
+                    # best achievable tortuosity with current path
+                    tortuosity_nb = np.infty
+                    for i, T in enumerate(star):
+                        D = T_len[i]
+                        P = pathlen_nb + np.linalg.norm(T - vec_nb)
+                        tortuosity_nb = min(tortuosity_nb, P/D)
+                    if tortuosity_nb < tortuosity_opt:
+                        if nb not in path:
+                            # continue explorative path
+                            (path_new, pathlen_new, vec_new, tortuosity_new
+                             ) = get_shortest_path(
+                                 nb, path=path_nb, pathlen=pathlen_nb,
+                                 vec=vec_nb, tortuosity_opt=tortuosity_opt)
+                            if path_new is not None:
+                                path_opt = path_new[:]
+                                pathlen_opt = pathlen_new
+                                vec_opt = vec_new.copy()
+                                tortuosity_opt = tortuosity_new
+                        elif nb == path[0] and not all(vec_nb == 0.0):
+                            # different periodic image of first site
+                            # --> we found a closed path
+                            path_opt = path_nb[:]
+                            pathlen_opt = pathlen_nb
+                            vec_opt = vec_nb.copy()
+                            D = np.linalg.norm(np.dot(vec_opt, self._avec))
+                            tortuosity_opt = pathlen_opt/D
+            return (path_opt, pathlen_opt, vec_opt, tortuosity_opt)
+
+        tortuosity = [np.infty for site in cluster_sites]
+        for site in cluster_sites:
+            if tortuosity[site] > 1.0:
+                (path, pathlen, vec, tort) = get_shortest_path(
+                    site, tortuosity_opt=tortuosity[site])
+            if path is not None:
+                for s in path:
+                    tortuosity[s] = min(tortuosity[s], tort)
+            if verbose:
+                print("  Site {}: Tortuosity = {}".format(
+                    site, tortuosity[site]))
+        return (np.min(tortuosity), np.mean(tortuosity), np.std(tortuosity))
 
     def extend_cluster(self, cluster_id, site_rules=None,
                        bond_rules=None, verbose=False):
@@ -974,6 +1149,81 @@ class Percolator(object):
 
         return (pc_site_any, pc_site_two, pc_site_all,
                 pc_bond_any, pc_bond_two, pc_bond_all)
+
+    def mean_tortuosity(self, plist, sequence, samples=500,
+                        save_discrete=False):
+        """
+        Estimate the tortuosity based on averaging over all percolating
+        clusters.
+
+        Arguments:
+          plist          list with desired probability points p; 0 < p < 1
+          sequence       list with sequence of species to be flipped; each
+                         pair of species has to be one non-percolating and
+                         one percolating species
+                         Example:
+                         sequence = [["M1", "Li"], ["M2", "Li"]]
+          samples        number of samples to average the MC result over
+          save_discrete  if True, save the discrete, supercell dependent
+                         values as well (file: discrete-wrap.dat)
+
+        Returns:
+          list of values corresponding to probabilities in `plist'
+
+        """
+
+        uprint(" Calculating tortuosity")
+        uprint(" Averaging over {} samples:\n".format(samples))
+
+        pb = ProgressBar(samples)
+
+        num_active_sites = 0
+        for initial, final in sequence:
+            num_active_sites += len(self.lattice.sites_of_species(initial))
+
+        Pn = [0 for i in range(num_active_sites)]
+        w = 1.0/float(samples)
+        for i in range(samples):
+            pb()
+            self.reset()
+            flip_list = []
+            for initial, final in sequence:
+                sites = self.lattice.sites_of_species(initial)
+                np.random.shuffle(sites)
+                flip_list += [(s, final) for s in sites]
+            if len(flip_list) > num_active_sites:
+                for n in range(len(flip_list)-num_active_sites):
+                    Pn.append(0)
+                num_active_sites = len(flip_list)
+            for n, (site, species) in enumerate(flip_list):
+                self._add_percolating_site(site=site, species=species)
+                t_sum = 0.0
+                num_clusters = 0
+                for c in self.percolating_clusters:
+                    t_min, t_mean, t_std = self.get_tortuosity(c)
+                    t_sum += t_mean
+                    num_clusters += 1.0
+                if num_clusters > 0:
+                    Pn[n] += w*t_sum/num_clusters
+        Pn = np.array(Pn)
+
+        pb()
+
+        if save_discrete:
+            fname = 'discrete-tortuosity.dat'
+            uprint(" Saving discrete data to file: {}".format(fname))
+            with open(fname, "w") as f:
+                for n in range(num_active_sites):
+                    f.write("{} {}\n".format(n+1, Pn[n]))
+
+        uprint(" Return convolution with a binomial distribution.\n")
+
+        nlist = np.arange(1, num_active_sites+1, dtype=int)
+        Pp = np.empty(len(plist))
+        for i in range(len(plist)):
+            Pp[i] = np.sum(binom.pmf(nlist, num_active_sites, plist[i])*Pn)
+
+        return Pp
 
     def save_structure(self, file_name="percolating_sites.vasp",
                        sort_species=True, label="P", static_sites=None):
