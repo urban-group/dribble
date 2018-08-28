@@ -132,22 +132,20 @@ def calc_inaccessible_sites(percolator, samples, save_raw, file_name,
                 plist[p], F_inacc[p], nclus[p]))
 
 
-def calc_mean_tortuosity(percolator, samples, save_raw, file_name,
-                         sequence):
-    plist = np.arange(0.01, 1.00, 0.01)
+def calc_mean_tortuosity(percolator, samples, file_name, sequence):
     F_tort = percolator.mean_tortuosity(
-        plist, sequence, samples=samples,
-        save_discrete=save_raw)
+        sequence, samples=samples)
 
     fname = file_name + ".tortuosity"
     uprint(" Writing results to: {}\n".format(fname))
 
     with open(fname, 'w') as f:
-        f.write("# {:^10s}   {:>10s}\n".format(
-            "p", "Tortuosity(p)"))
-        for p in range(len(plist)):
-            f.write("  {:10.8f}   {:10.8f}\n".format(
-                plist[p], F_tort[p]))
+        f.write("# {:^10s}  {:^10s}   {:s}\n".format(
+            "N", "p", "Tortuosity(p)"))
+        N = len(F_tort)
+        for i, T in enumerate(F_tort):
+            f.write("  {:10d}  {:10.8f}   {:10.8f}\n".format(
+                i+1, (i+1)/float(N), T))
 
 
 def compute_percolation(input_file, structure_file, samples,
@@ -197,8 +195,8 @@ def compute_percolation(input_file, structure_file, samples,
                                 file_name, inp.flip_sequence,
                                 inaccessible)
     if mean_tortuosity:  # tortuosity as function of concentration
-        calc_mean_tortuosity(percolator, samples, save_raw,
-                             file_name, inp.flip_sequence)
+        calc_mean_tortuosity(percolator, samples, file_name,
+                             inp.flip_sequence)
 
     dt = time.gmtime(time.clock())
     uprint(" All done.  Elapsed CPU time: {:02d}h{:02d}m{:02d}s\n".format(

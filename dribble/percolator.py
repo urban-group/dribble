@@ -521,12 +521,9 @@ class Percolator(object):
         cluster_sites = self.get_sites_of_cluster(cluster_id)
 
         # each site and its periodic images
-        # Tvecs = [(i, j, k) for i in (-1, 0, 1)
-        #          for j in (-1, 0, 1)
-        #          for k in (-1, 0, 1)]
-        Tvecs = [(i, j, k) for i in (0, 1)
-                 for j in (0, 1)
-                 for k in (0, 1)]
+        Tvecs = [(i, j, k) for i in (-1, 0, 1)
+                 for j in (-1, 0, 1)
+                 for k in (-1, 0, 1)]
         Tvec_len = [np.linalg.norm(np.dot(T, self._avec)) for T in Tvecs]
         pbc_cluster_sites = []
         untranslated_sites = []
@@ -1158,25 +1155,22 @@ class Percolator(object):
         return (pc_site_any, pc_site_two, pc_site_all,
                 pc_bond_any, pc_bond_two, pc_bond_all)
 
-    def mean_tortuosity(self, plist, sequence, samples=500,
-                        save_discrete=False):
+    def mean_tortuosity(self, sequence, samples=500):
         """
         Estimate the tortuosity based on averaging over all percolating
         clusters.
 
         Arguments:
-          plist          list with desired probability points p; 0 < p < 1
           sequence       list with sequence of species to be flipped; each
                          pair of species has to be one non-percolating and
                          one percolating species
                          Example:
                          sequence = [["M1", "Li"], ["M2", "Li"]]
           samples        number of samples to average the MC result over
-          save_discrete  if True, save the discrete, supercell dependent
-                         values as well (file: discrete-wrap.dat)
 
         Returns:
-          list of values corresponding to probabilities in `plist'
+          list of tortuosity values corresponding to different numbers of
+          occupied sites
 
         """
 
@@ -1189,8 +1183,8 @@ class Percolator(object):
         for initial, final in sequence:
             num_active_sites += len(self.lattice.sites_of_species(initial))
 
-        Pn = [0 for i in range(num_active_sites)]
-        w = 1.0/float(samples)
+        Pn = [np.inf for i in range(num_active_sites)]
+        Nn = [0 for i in range(num_active_sites)]
         for i in range(samples):
             pb()
             self.reset()
@@ -1202,6 +1196,7 @@ class Percolator(object):
             if len(flip_list) > num_active_sites:
                 for n in range(len(flip_list)-num_active_sites):
                     Pn.append(0)
+                    Nn.append(0)
                 num_active_sites = len(flip_list)
             for n, (site, species) in enumerate(flip_list):
                 self._add_percolating_site(site=site, species=species)
@@ -1212,26 +1207,26 @@ class Percolator(object):
                     t_sum += t_mean
                     num_clusters += 1.0
                 if num_clusters > 0:
-                    Pn[n] += w*t_sum/num_clusters
-        Pn = np.array(Pn)
+                    tau = t_sum/num_clusters
+                    if abs(tau - 1.0) < 0.001:
+                        # if tortuosity is 1, assume that at higher
+                        # concentrations it will also be 1
+                        for k in range(n, len(flip_list)+1):
+                            if Nn[k] == 0:
+                                Pn[k] = 0.0
+                            Pn[k] += 1.0
+                            Nn[k] += 1
+                            break
+                    else:
+                        if Nn[n] == 0:
+                            Pn[n] = 0.0
+                        Pn[n] += tau
+                        Nn[n] += 1
+        Pn = np.array(Pn)/np.array(Nn, dtype=float)
 
         pb()
 
-        if save_discrete:
-            fname = 'discrete-tortuosity.dat'
-            uprint(" Saving discrete data to file: {}".format(fname))
-            with open(fname, "w") as f:
-                for n in range(num_active_sites):
-                    f.write("{} {}\n".format(n+1, Pn[n]))
-
-        uprint(" Return convolution with a binomial distribution.\n")
-
-        nlist = np.arange(1, num_active_sites+1, dtype=int)
-        Pp = np.empty(len(plist))
-        for i in range(len(plist)):
-            Pp[i] = np.sum(binom.pmf(nlist, num_active_sites, plist[i])*Pn)
-
-        return Pp
+        return Pn
 
     def save_structure(self, file_name="percolating_sites.vasp",
                        sort_species=True, label="P", static_sites=None):
