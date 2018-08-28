@@ -1222,11 +1222,14 @@ class Percolator(object):
                             Pn[n] = 0.0
                         Pn[n] += tau
                         Nn[n] += 1
-        Pn = np.array(Pn)/np.array(Nn, dtype=float)
-
         pb()
 
-        return Pn
+        # normalize only entries with data (other enties are infinite)
+        for n in range(len(Pn)):
+            if Nn[n] > 0:
+                Pn[n] /= float(Nn[n])
+
+        return np.array(Pn)
 
     def save_structure(self, file_name="percolating_sites.vasp",
                        sort_species=True, label="P", static_sites=None):
