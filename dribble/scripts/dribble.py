@@ -45,7 +45,8 @@ def check_if_percolating(percolator, save_clusters, tortuosity):
             for c in percolator.percolating_clusters:
                 t_min, t_mean, t_std = percolator.get_tortuosity(c)
                 uprint(" Tortuosity of cluster {} (min, mean): ".format(c)
-                       + "{}, {} +/- {}".format(t_min, t_mean, t_std))
+                       + "{:5.3f}, {:5.3f} +/- {:5.3f}".format(
+                           t_min, t_mean, t_std))
             uprint("")
     else:
         uprint(" The initial structure is NOT percolating.\n")

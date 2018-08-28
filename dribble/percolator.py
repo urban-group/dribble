@@ -521,14 +521,22 @@ class Percolator(object):
         cluster_sites = self.get_sites_of_cluster(cluster_id)
 
         # each site and its periodic images
-        Tvecs = [(i, j, k) for i in (-1, 0, 1)
-                 for j in (-1, 0, 1)
-                 for k in (-1, 0, 1)]
+        # Tvecs = [(i, j, k) for i in (-1, 0, 1)
+        #          for j in (-1, 0, 1)
+        #          for k in (-1, 0, 1)]
+        Tvecs = [(i, j, k) for i in (0, 1)
+                 for j in (0, 1)
+                 for k in (0, 1)]
         Tvec_len = [np.linalg.norm(np.dot(T, self._avec)) for T in Tvecs]
         pbc_cluster_sites = []
+        untranslated_sites = []
+        i = 0
         for site in cluster_sites:
             for T in Tvecs:
+                if all([t == 0 for t in T]):
+                    untranslated_sites.append(i)
                 pbc_cluster_sites.append((site, T))
+                i += 1
 
         # reverse mapping
         site_id = {(site, T): i for i, (site, T)
@@ -551,21 +559,21 @@ class Percolator(object):
                     dist = np.linalg.norm(np.dot(v_ij, self._avec))
                     G[i, j] = G[j, i] = dist
 
-        # get shortest paths between each pairs of sites
-        dist_matrix = csgraph.shortest_path(G)
+        # compute shortest paths with untranslated end points
+        dist_matrix = csgraph.shortest_path(G, indices=untranslated_sites)
 
         # now compute tortuosity for each shortest path between a site
         # and its periodic images
-        tortuosity = [np.infty for site in cluster_sites]
+        tortuosity = [np.inf for site in cluster_sites]
         for isite, site in enumerate(cluster_sites):
             i = site_id[(site, (0, 0, 0))]
             for iT, T in enumerate(Tvecs):
                 j = site_id[(site, T)]
-                if i != j:
+                if (i != j) and not np.isinf(dist_matrix[isite, j]):
                     # the distance between the end points is the length of T
                     D = Tvec_len[iT]
                     # tortuosity
-                    t = dist_matrix[i, j]/D
+                    t = dist_matrix[isite, j]/D
                     tortuosity[isite] = min(tortuosity[isite], t)
             if verbose:
                 print("  Site {}: Tortuosity = {}".format(
