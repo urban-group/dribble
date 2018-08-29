@@ -825,15 +825,17 @@ class Percolator(object):
         comp = self.lattice.composition
         for s in comp:
             uprint("{} {:.2f} ".format(s, comp[s]), end="")
-        uprint("\n Averaging over {} samples:\n".format(samples))
-        pb = ProgressBar(samples)
 
         # Cluster sizes should be based on only the currently active
         # species, but the way it is presently implemented all percolating
         # sites contribute to the cluster size.
-        uprint(" Warning: this method does not consider the correct")
-        uprint("          cluster sizes if multiple percolating")
-        uprint("          species exist.")
+        if len(self.percolating_species) > 1:
+            uprint(" Warning: this method does not consider the correct")
+            uprint("          cluster sizes if multiple percolating")
+            uprint("          species exist.")
+
+        uprint("\n Averaging over {} samples:\n".format(samples))
+        pb = ProgressBar(samples)
 
         num_active_sites = 0
         for initial, final in sequence:
@@ -941,7 +943,8 @@ class Percolator(object):
                 self._add_percolating_site(site=site, species=species)
                 wrapping = np.sum(self.wrapping[self.largest_cluster])
                 if (wrapping > 0):
-                    Pnc[n:] += w
+                    for k in range(n, len(Pnc)):
+                        Pnc[k] += w
                     Pn[n] += w2
                     break
         Pn = np.array(Pn)
