@@ -33,10 +33,11 @@ from dribble.misc import uprint
 __author__ = "Alexander Urban"
 
 
-def check_if_percolating(percolator, save_clusters, tortuosity):
+def check_if_percolating(percolator, inp, save_clusters, tortuosity):
     noccup = percolator.num_occupied
     nspan = percolator.check_spanning(verbose=True,
-                                      save_clusters=save_clusters)
+                                      save_clusters=save_clusters,
+                                      static_sites=inp.static_sites)
     if (nspan > 0):
         uprint(" The initial structure is percolating.\n")
         uprint(" Fraction of accessible sites: {}\n".format(
@@ -180,7 +181,7 @@ def compute_percolation(input_file, structure_file, samples,
     uprint("\n MC percolation simulation\n -------------------------\n")
 
     if check:  # check, if initial structure is percolating
-        check_if_percolating(percolator, save_clusters, tortuosity)
+        check_if_percolating(percolator, inp, save_clusters, tortuosity)
     if pc:  # calculate critical site concentrations
         calc_critical_concentration(percolator, save_clusters, samples,
                                     file_name, inp.flip_sequence)
