@@ -189,7 +189,7 @@ class NearestNeighborBR(BondRule):
     """
 
     def _check_percolating(self, percolator, site1, site2):
-        return (site2 in percolator._neighbors[site1])
+        return (site2 in percolator.neighbors[site1])
 
 
 class CommonNeighborsBR(BondRule):
