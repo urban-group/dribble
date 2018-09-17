@@ -93,6 +93,10 @@ Here an example input file:
    }
 
 
+See also the `examples`_ directory which contains a number of Jupyter
+notebooks explaining different aspects of simulations with Dribble.
+
+.. _`examples`: ./examples/
 
 
 Command line tool
