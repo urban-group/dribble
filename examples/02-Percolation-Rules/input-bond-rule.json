@@ -1,0 +1,26 @@
+{
+    "structure": "../LiMO2-Crystal-Structures/LiMO2-rotated.vasp",
+    "formula_units": 1.0,
+    "sublattices": {
+        "cations": {
+            "description": "Cation site",
+            "sites": {"species": ["Li", "Co"]},
+            "initial_occupancy": {"TM": 1.0}
+        },
+        "oxygen": {
+            "description": "oxygen sites",
+            "sites": {"species": ["O"]},
+            "ignore": true
+        }
+    },
+    "bonds": [
+        {
+            "sublattices": ["cations", "cations"],
+            "bond_rules": [
+                ["MinCommonNNNeighborsBR", {"num_neighbors": 2}]
+            ]
+        }
+    ],
+    "percolating_species": ["Li"],
+    "flip_sequence": [["TM", "Li"]]
+}

@@ -1,0 +1,34 @@
+{
+    "structure": "../LiMO2-Crystal-Structures/LiMO2+tet-rotated.vasp",
+    "formula_units": 1,
+    "cutoff": 2.0,
+    "sublattices": {
+        "tet": {
+            "description": "tetrahedral site",
+            "sites": [3, 4, 5, 6],
+            "initial_occupancy": {"Vac": 1.0},
+            "site_rules": [
+                ["NeighborShellSR",
+                 {"stable_nb_shells": [[
+                     {"oct": [{"min": 4, "species": ["Li"]}]}
+                   ]]
+                 }
+                ]
+            ]
+        },
+        "oct": {
+            "description": "octahedral site",
+            "sites": [1, 2],
+            "initial_occupancy": {"TM": 1.0}
+        },
+        "oxygen": {
+            "description": "oxygen sites",
+            "sites": {"species": ["O"]},
+            "ignore": true
+        }
+    },
+    "bonds": [{"sublattices": ["oct", "tet"]}],
+    "percolating_species": ["Li", "Vac"],
+    "static_species": ["Vac"],
+    "flip_sequence": [["TM", "Li"]]
+}
