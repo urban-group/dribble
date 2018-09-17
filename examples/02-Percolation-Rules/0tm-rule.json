@@ -1,0 +1,23 @@
+{
+    "formula_units": 320,
+    "sublattices": {
+        "cation": {
+            "description": "cation sites",
+            "sites": {"species": ["Li", "Mn", "Nb"]}
+        },
+        "anion": {
+            "description": "anion sites",
+            "sites": {"species": ["O", "F"]},
+            "ignore": true
+        }
+    },
+    "bonds": [
+        {
+            "sublattices": ["cation", "cation"],
+            "bond_rules": [
+                ["MinCommonNNNeighborsBR", {"num_neighbors": 2}]
+            ]
+        }
+    ],
+    "percolating_species": ["Li"]
+}
