@@ -442,7 +442,8 @@ class Percolator(object):
             site = self._next[site]
         return cluster_sites
 
-    def check_spanning(self, verbose=False, save_clusters=False):
+    def check_spanning(self, verbose=False, save_clusters=False,
+                       static_sites=None):
         """
         Check, how many (if any) spanning clusters are present.
 
@@ -452,6 +453,11 @@ class Percolator(object):
           save_clusters (bool): if True, save a structure file named
             'cluster_{}.vasp' for each detected cluster with more than
             1 site
+          static_sites (structure): A pymatgen Structure object with additional
+            sites that should be included in saved cluster structures but were
+            not used in the percolation simulation.  A matching supercell
+            will be generated automatically based on the supercell used
+            for the percolation simulation.
 
         """
 
@@ -480,7 +486,11 @@ class Percolator(object):
                 if save_clusters and len(cluster) > 1:
                     self.save_cluster(cluster,
                                       file_name="cluster_{}.vasp".format(i),
-                                      sort_species=False)
+                                      sort_species=False,
+                                      static_sites=static_sites)
+                    self.save_cluster(cluster,
+                                      file_name="cluster_{}_2.vasp".format(i),
+                                      cluster_only=True)
 
         if num_clusters > 0:
             avg_size /= num_clusters
@@ -1249,7 +1259,7 @@ class Percolator(object):
           static_sites (structure): A pymatgen Structure object with additional
             sites that should be included in the saved structure but were
             not used in the percolation simulation.  A matching supercell
-            sill be generated automatically based on the supercell used
+            will be generated automatically based on the supercell used
             for the percolation simulation.
 
         """
@@ -1286,7 +1296,8 @@ class Percolator(object):
             poscar.write_file(file_name)
 
     def save_cluster(self, cluster, file_name="CLUSTER.vasp",
-                     sort_species=True):
+                     sort_species=True, static_sites=None,
+                     cluster_only=False):
         """
         Save a particular cluster to an output file.
         Relies on `pymatgen' for the file I/O.
@@ -1297,22 +1308,32 @@ class Percolator(object):
           file_name (str): name of the POSCAR file to be created
           sort_species (bool): if True, the coordinates will be sorted
             by species in the POSCAR file
+          static_sites (structure): A pymatgen Structure object with additional
+            sites that should be included in the saved structure but were
+            not used in the percolation simulation.  A matching supercell
+            will be generated automatically based on the supercell used
+            for the percolation simulation.
+          cluster_only (bool): If true, only save the coordinates of sites
+            that belong to the cluster
 
         """
 
         from pymatgen.core.structure import Structure
         from pymatgen.io.vasp.inputs import Poscar
 
-        species = ["V" for i in range(self._nsites)]
+        vacant = "V"
+        occupied = "P"
+
+        species = [vacant for i in range(self._nsites)]
         if isinstance(cluster, (int, np.int64)):
             i = self._first[cluster]
-            species[i] = "O"
+            species[i] = occupied
             while (self._next[i] >= 0):
                 i = self._next[i]
-                species[i] = "O"
+                species[i] = occupied
         else:
             for i in cluster:
-                species[i] = "O"
+                species[i] = occupied
 
         species = np.array(species)
         if sort_species:
@@ -1320,7 +1341,17 @@ class Percolator(object):
         else:
             idx = np.array([i for i in range(len(species))])
 
+        if cluster_only:
+            idx = np.array([i for i in range(len(species))
+                            if species[i] == occupied])
+
         struc = Structure(self._avec, species[idx], self._coo[idx])
+
+        if static_sites:
+            struc2 = static_sites.copy()
+            struc2.make_supercell(self.lattice.supercell)
+            struc = Structure.from_sites(struc.sites + struc2.sites)
+
         poscar = Poscar(struc)
         poscar.write_file(file_name)
 
