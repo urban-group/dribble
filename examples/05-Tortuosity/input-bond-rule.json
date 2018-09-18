@@ -1,0 +1,19 @@
+{
+    "structure": "../LiMO2-Crystal-Structures/Cu-fcc.vasp",
+    "formula_units": 1.0,
+    "sublattices": {
+        "A": {
+            "description": "Copper sites",
+            "sites": {"species": ["Cu"]},
+            "initial_occupancy": {"Vac": 1.0}
+        }
+    },
+    "bonds": [
+        {
+            "sublattices": ["A", "A"],
+            "bond_rules": [["NearestNeighborBR"]]
+        }
+    ],
+    "percolating_species": ["Cu"],
+    "flip_sequence": [["Vac", "Cu"]]
+}
