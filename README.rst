@@ -17,7 +17,9 @@ For more information about the method and for actual applications see:
 A.\ Urban, J.\ Lee, and G.\ Ceder,
 *Adv. Energy Mater.* **4** (2014) 1400478 (https://doi.org/10.1002/aenm.201400478). |br|
 J.\ Lee, A.\ Urban, X.\ Li, D.\ Su, G.\ Hautier, and G.\ Ceder,
-*Science* **343** (2014) 519-522 (https://doi.org/10.1126/science.1246432 ).
+*Science* **343** (2014) 519-522 (https://doi.org/10.1126/science.1246432 ). |br|
+B.\ Ouyang†, N.\ Artrith†, Z.\ Lun†, Z.\ Jadidi, D.\ A.\ Kitchaev, H.\ Ji, A.\ Urban, G.\ Ceder.
+*Adv. Energy Mater.* **10** (2020) 1903240 (https://doi.org/10.1002/aenm.201903240). 
 
 .. _`percolation theory`: https://en.wikipedia.org/wiki/Percolation_theory
 .. |br| raw:: html
