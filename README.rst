@@ -5,36 +5,43 @@
 What is Dribble?
 ----------------
 
-The main purpose of the Dribble package is simulating ionic transport
-properties in atomic structures using a Monte Carlo algorithm.  In
-essence, Dribble solves the *site percolation* problem of `percolation
+The *Dribble* package implements a lattice-model Monte-Carlo method for 
+simulating ionic transport properties in atomic structures.  In
+essence, *Dribble* solves the *site percolation* problem of `percolation
 theory`_ for a given set of *percolation rules*.  These rules can be
 quite complex and reflect the physical interactions of the percolating
 species with other atomic species in the structure.
 
-For more information about the method and for actual applications see:
+For more information about the method and for applications see:
 
 A.\ Urban, J.\ Lee, and G.\ Ceder,
 *Adv. Energy Mater.* **4** (2014) 1400478 (https://doi.org/10.1002/aenm.201400478). |br|
 J.\ Lee, A.\ Urban, X.\ Li, D.\ Su, G.\ Hautier, and G.\ Ceder,
-*Science* **343** (2014) 519-522 (https://doi.org/10.1126/science.1246432 ).
+*Science* **343** (2014) 519-522 (https://doi.org/10.1126/science.1246432 ). |br|
+B.\ Ouyang†, N.\ Artrith†, Z.\ Lun†, Z.\ Jadidi, D.\ A.\ Kitchaev, H.\ Ji, A.\ Urban, G.\ Ceder.
+*Adv. Energy Mater.* **10** (2020) 1903240 (https://doi.org/10.1002/aenm.201903240). 
 
 .. _`percolation theory`: https://en.wikipedia.org/wiki/Percolation_theory
 .. |br| raw:: html
 
    <br />
 
+
 Installation
 ------------
 
-Dribble can be installed just as any Python package.  To use ``pip``,
-run the following command inside the ``dribble`` diretory:
+To use ``pip`` to install *Dribble*,
+run the following command inside the ``dribble`` directory:
 
 ::
 
-  pip install -e . --user
+  pip install .
 
-This will install the ``dribble`` package for the present user only.
+or to install in "editable" mode, use
+
+::
+
+  pip install -e .
 
 
 Dribble package
@@ -92,6 +99,8 @@ Here an example input file:
        "percolating_species": ["Li"]
    }
 
+
+Here, ``POSCAR`` is an atomic structure file in the VASP format.
 
 See also the `examples`_ directory which contains a number of Jupyter
 notebooks explaining different aspects of simulations with Dribble.
