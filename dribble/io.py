@@ -22,8 +22,8 @@ import json
 from warnings import warn
 import numpy as np
 
-from pymatgen.io.vasp import Poscar
-from pymatgen import Structure
+from pymatgen.io.vasp.inputs import Poscar
+from pymatgen.core import Structure
 
 from .sublattice import Sublattice, Bond
 

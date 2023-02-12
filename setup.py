@@ -22,10 +22,10 @@ setup(
     version=version,
     description=package_description,
     long_description=long_description,
-    # url='dribble.atomistic.net',
+    url='https://github.com/urban-group/dribble/',
     author=__author__,
     author_email=__email__,
-    license='MIT',
+    license='MPL2',
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',
@@ -33,20 +33,19 @@ setup(
         'Topic :: Scientific/Engineering :: Physics',
         'Topic :: Scientific/Engineering :: Chemistry',
         'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.8',
     ],
     keywords=['percolation', 'materials science', 'monte carlo'],
     packages=find_packages(exclude=['tests']),
-    install_requires=['numpy', 'scipy', 'pymatgen'],
-    # package_data={
-    #     'sample': [''],
-    # },
+    install_requires=[
+        'numpy>=1.20.1',
+        'scipy>=1.5.0',
+        'pymatgen>=2022.11.7'
+    ],
     entry_points={
         'console_scripts': [
             'dribble=dribble.scripts.dribble:main',
         ],
     },
-    # scripts=glob.glob(os.path.join("scripts", "*.py"))
 )

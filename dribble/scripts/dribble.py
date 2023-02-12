@@ -199,7 +199,7 @@ def compute_percolation(input_file, structure_file, samples,
         calc_mean_tortuosity(percolator, samples, file_name,
                              inp.flip_sequence)
 
-    dt = time.gmtime(time.clock())
+    dt = time.gmtime(time.process_time())
     uprint(" All done.  Elapsed CPU time: {:02d}h{:02d}m{:02d}s\n".format(
             dt.tm_hour, dt.tm_min, dt.tm_sec))
 

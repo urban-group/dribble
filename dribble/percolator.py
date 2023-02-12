@@ -1264,7 +1264,7 @@ class Percolator(object):
 
         """
 
-        from pymatgen.core.structure import Structure
+        from pymatgen.core import Structure
         from pymatgen.io.vasp.inputs import Poscar
         try:
             import strucconv as sc
@@ -1318,7 +1318,7 @@ class Percolator(object):
 
         """
 
-        from pymatgen.core.structure import Structure
+        from pymatgen.core import Structure
         from pymatgen.io.vasp.inputs import Poscar
 
         vacant = "V"
@@ -1361,7 +1361,7 @@ class Percolator(object):
 
         """
 
-        from pymatgen.core.structure import Structure
+        from pymatgen.core import Structure
         from pymatgen.io.vaspio import Poscar
 
         species = ["V" for i in range(self._nsites)]

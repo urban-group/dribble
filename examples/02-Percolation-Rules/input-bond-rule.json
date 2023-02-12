@@ -3,12 +3,12 @@
     "formula_units": 1.0,
     "sublattices": {
         "cations": {
-            "description": "Cation site",
+            "description": "Cation sites",
             "sites": {"species": ["Li", "Co"]},
             "initial_occupancy": {"TM": 1.0}
         },
         "oxygen": {
-            "description": "oxygen sites",
+            "description": "Oxygen sites",
             "sites": {"species": ["O"]},
             "ignore": true
         }
